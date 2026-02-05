@@ -1,0 +1,7 @@
+**/target/
+**/__pycache__/
+**/*.pkl
+**/*.bin
+.env
+node_modules/
+.DS_Store
