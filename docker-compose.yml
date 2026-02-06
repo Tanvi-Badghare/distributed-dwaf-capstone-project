@@ -1,0 +1,345 @@
+version: '3.8'
+
+services:
+  # ZKP Layer - Zero-Knowledge Proof Service
+  zkp-layer:
+    build: 
+      context: ./zkp-layer
+      dockerfile: Dockerfile
+    container_name: waf-zkp
+    ports:
+      - "8080:8080"
+    networks:
+      - waf-network
+    environment:
+      - RUST_LOG=info
+      - ROCKET_ADDRESS=0.0.0.0
+      - ROCKET_PORT=8080
+    volumes:
+      - ./zkp-layer/params:/app/params
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    restart: unless-stopped
+
+  # Consensus Layer - Tendermint BFT
+  consensus-node0:
+    build:
+      context: ./consensus
+      dockerfile: Dockerfile
+    container_name: waf-consensus-node0
+    ports:
+      - "8081:8081"
+      - "26656:26656"  # Tendermint P2P
+      - "26657:26657"  # Tendermint RPC
+    networks:
+      - waf-network
+    environment:
+      - NODE_ID=node0
+      - CONSENSUS_NODES=4
+    volumes:
+      - ./consensus/config:/app/config
+      - consensus-node0-data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  consensus-node1:
+    build:
+      context: ./consensus
+      dockerfile: Dockerfile
+    container_name: waf-consensus-node1
+    ports:
+      - "8181:8081"
+      - "26756:26656"
+      - "26757:26657"
+    networks:
+      - waf-network
+    environment:
+      - NODE_ID=node1
+      - CONSENSUS_NODES=4
+    volumes:
+      - ./consensus/config:/app/config
+      - consensus-node1-data:/app/data
+    depends_on:
+      - consensus-node0
+    restart: unless-stopped
+
+  consensus-node2:
+    build:
+      context: ./consensus
+      dockerfile: Dockerfile
+    container_name: waf-consensus-node2
+    ports:
+      - "8281:8081"
+      - "26856:26656"
+      - "26857:26657"
+    networks:
+      - waf-network
+    environment:
+      - NODE_ID=node2
+      - CONSENSUS_NODES=4
+    volumes:
+      - ./consensus/config:/app/config
+      - consensus-node2-data:/app/data
+    depends_on:
+      - consensus-node0
+    restart: unless-stopped
+
+  consensus-node3:
+    build:
+      context: ./consensus
+      dockerfile: Dockerfile
+    container_name: waf-consensus-node3
+    ports:
+      - "8381:8081"
+      - "26956:26656"
+      - "26957:26657"
+    networks:
+      - waf-network
+    environment:
+      - NODE_ID=node3
+      - CONSENSUS_NODES=4
+    volumes:
+      - ./consensus/config:/app/config
+      - consensus-node3-data:/app/data
+    depends_on:
+      - consensus-node0
+    restart: unless-stopped
+
+  # ML Detector - Machine Learning Threat Detection
+  ml-detector:
+    build:
+      context: ./ml-detector
+      dockerfile: Dockerfile
+    container_name: waf-ml
+    ports:
+      - "8082:8082"
+    networks:
+      - waf-network
+    environment:
+      - FLASK_ENV=production
+      - MODEL_PATH=/app/models
+      - NSL_KDD_PATH=/app/training/nsl-kdd-dataset
+    volumes:
+      - ./ml-detector/models:/app/models
+      - ./ml-detector/training:/app/training
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  # TAXII Server - Threat Intelligence Sharing
+  taxii-server:
+    build:
+      context: ./taxii-server
+      dockerfile: Dockerfile
+    container_name: waf-taxii
+    ports:
+      - "8083:8083"
+    networks:
+      - waf-network
+    environment:
+      - FLASK_ENV=production
+      - COLLECTION_PATH=/app/collections
+    volumes:
+      - ./taxii-server/collections:/app/collections
+      - taxii-data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  # Orchestrator - Integration Layer (Weeks 4-5)
+  orchestrator:
+    build:
+      context: ./orchestrator
+      dockerfile: Dockerfile
+    container_name: waf-orchestrator
+    ports:
+      - "8000:8000"  # Main WAF proxy port
+      - "8001:8001"  # Admin/metrics port
+    networks:
+      - waf-network
+    environment:
+      - ML_DETECTOR_URL=http://ml-detector:8082
+      - ZKP_SERVICE_URL=http://zkp-layer:8080
+      - CONSENSUS_URL=http://consensus-node0:8081
+      - TAXII_URL=http://taxii-server:8083
+    volumes:
+      - ./orchestrator/config:/app/config
+    depends_on:
+      - zkp-layer
+      - consensus-node0
+      - ml-detector
+      - taxii-server
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    profiles:
+      - integration  # Only start in integration phase
+
+  # Vulnerable Site 1 - PHP Guestbook
+  site1-php:
+    build:
+      context: ./sites/site1-php-guestbook
+      dockerfile: Dockerfile
+    container_name: vulnerable-site-php
+    ports:
+      - "9001:80"
+    networks:
+      - waf-network
+    environment:
+      - MYSQL_HOST=site1-db
+      - MYSQL_DATABASE=guestbook
+      - MYSQL_USER=webapp
+      - MYSQL_PASSWORD=webapp123
+    depends_on:
+      - site1-db
+    restart: unless-stopped
+    profiles:
+      - sites
+
+  site1-db:
+    image: mysql:8.0
+    container_name: site1-mysql
+    networks:
+      - waf-network
+    environment:
+      - MYSQL_ROOT_PASSWORD=rootpass
+      - MYSQL_DATABASE=guestbook
+      - MYSQL_USER=webapp
+      - MYSQL_PASSWORD=webapp123
+    volumes:
+      - site1-db-data:/var/lib/mysql
+    restart: unless-stopped
+    profiles:
+      - sites
+
+  # Vulnerable Site 2 - Django Search
+  site2-django:
+    build:
+      context: ./sites/site2-django-search
+      dockerfile: Dockerfile
+    container_name: vulnerable-site-django
+    ports:
+      - "9002:8000"
+    networks:
+      - waf-network
+    environment:
+      - DJANGO_SETTINGS_MODULE=searchapp.settings
+      - DATABASE_URL=sqlite:///db.sqlite3
+    restart: unless-stopped
+    profiles:
+      - sites
+
+  # Vulnerable Site 3 - Node.js App
+  site3-nodejs:
+    build:
+      context: ./sites/site3-nodejs-app
+      dockerfile: Dockerfile
+    container_name: vulnerable-site-nodejs
+    ports:
+      - "9003:3000"
+    networks:
+      - waf-network
+    environment:
+      - NODE_ENV=development
+      - DB_HOST=site3-db
+      - DB_NAME=nodeapp
+      - DB_USER=nodeuser
+      - DB_PASS=nodepass
+    depends_on:
+      - site3-db
+    restart: unless-stopped
+    profiles:
+      - sites
+
+  site3-db:
+    image: postgres:15
+    container_name: site3-postgres
+    networks:
+      - waf-network
+    environment:
+      - POSTGRES_DB=nodeapp
+      - POSTGRES_USER=nodeuser
+      - POSTGRES_PASSWORD=nodepass
+    volumes:
+      - site3-db-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    profiles:
+      - sites
+
+  # Prometheus Monitoring (Optional - Week 6)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: waf-prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - waf-network
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+  # Grafana Monitoring (Optional - Week 6)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: waf-grafana
+    ports:
+      - "3000:3000"
+    networks:
+      - waf-network
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=
+    volumes:
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+networks:
+  waf-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  consensus-node0-data:
+  consensus-node1-data:
+  consensus-node2-data:
+  consensus-node3-data:
+  taxii-data:
+  site1-db-data:
+  site3-db-data:
+  prometheus-data:
+  grafana-data:
