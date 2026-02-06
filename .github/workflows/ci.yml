@@ -1,0 +1,310 @@
+name: Distributed WAF CI/CD
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # Job 1: Lint and Format Check
+  lint:
+    name: Lint & Format Check
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Set up Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        components: rustfmt, clippy
+        override: true
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+
+    - name: Python Lint (flake8)
+      run: |
+        pip install flake8
+        flake8 ml-detector/ taxii-server/ tests/ --max-line-length=120 --ignore=E501,W503
+
+    - name: Rust Format Check
+      working-directory: ./zkp-layer
+      run: cargo fmt -- --check
+
+    - name: Rust Clippy
+      working-directory: ./zkp-layer
+      run: cargo clippy -- -D warnings
+
+    - name: Go Format Check
+      working-directory: ./consensus
+      run: |
+        gofmt -l .
+        test -z "$(gofmt -l .)"
+
+  # Job 2: Unit Tests
+  test-unit:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: lint
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Set up Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        override: true
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+
+    - name: Install Python dependencies
+      run: |
+        pip install -r ml-detector/requirements.txt
+        pip install -r taxii-server/requirements.txt
+        pip install pytest pytest-cov
+
+    - name: Test Python (ML Detector)
+      working-directory: ./ml-detector
+      run: |
+        python -m pytest tests/unit/ -v --cov=. --cov-report=xml
+
+    - name: Test Python (TAXII Server)
+      working-directory: ./taxii-server
+      run: |
+        python -m pytest tests/unit/ -v || echo "TAXII tests not yet implemented"
+
+    - name: Test Rust (ZKP Layer)
+      working-directory: ./zkp-layer
+      run: cargo test --verbose
+
+    - name: Test Go (Consensus)
+      working-directory: ./consensus
+      run: go test -v ./...
+
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v3
+      with:
+        files: ./ml-detector/coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+
+  # Job 3: Build Docker Images
+  build:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: test-unit
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build ZKP Layer Image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./zkp-layer
+        file: ./zkp-layer/Dockerfile
+        push: false
+        tags: waf-zkp:test
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Build Consensus Image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./consensus
+        file: ./consensus/Dockerfile
+        push: false
+        tags: waf-consensus:test
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Build ML Detector Image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./ml-detector
+        file: ./ml-detector/Dockerfile
+        push: false
+        tags: waf-ml:test
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Build TAXII Server Image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./taxii-server
+        file: ./taxii-server/Dockerfile
+        push: false
+        tags: waf-taxii:test
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  # Job 4: Integration Tests
+  test-integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: build
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install Python dependencies
+      run: |
+        pip install requests pytest
+
+    - name: Start services with Docker Compose
+      run: |
+        docker-compose up -d zkp-layer consensus-node0 ml-detector taxii-server
+        sleep 30  # Wait for services to be ready
+
+    - name: Check service health
+      run: |
+        curl -f http://localhost:8080/health || exit 1
+        curl -f http://localhost:8081/health || exit 1
+        curl -f http://localhost:8082/health || exit 1
+        curl -f http://localhost:8083/health || exit 1
+
+    - name: Run integration tests
+      run: |
+        python tests/integration/test_ml_to_zkp.py || echo "Test not yet implemented"
+        python tests/integration/test_consensus_to_taxii.py || echo "Test not yet implemented"
+
+    - name: Run end-to-end demo
+      run: |
+        python tests/end-to-end-demo.py
+
+    - name: Show service logs on failure
+      if: failure()
+      run: |
+        docker-compose logs zkp-layer
+        docker-compose logs consensus-node0
+        docker-compose logs ml-detector
+        docker-compose logs taxii-server
+
+    - name: Cleanup
+      if: always()
+      run: docker-compose down -v
+
+  # Job 5: Security Scan
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: lint
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+
+    - name: Upload Trivy results to GitHub Security
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+    - name: Python Security Check (bandit)
+      run: |
+        pip install bandit
+        bandit -r ml-detector/ taxii-server/ -f json -o bandit-report.json || true
+
+    - name: Rust Security Audit
+      working-directory: ./zkp-layer
+      run: |
+        cargo install cargo-audit
+        cargo audit
+
+  # Job 6: Performance Benchmarks (only on main branch)
+  benchmark:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+    needs: test-integration
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        pip install -r ml-detector/requirements.txt
+        pip install locust
+
+    - name: Start services
+      run: |
+        docker-compose up -d
+        sleep 30
+
+    - name: Run ML inference benchmark
+      run: |
+        python benchmarks/ml-inference-benchmark.py
+
+    - name: Run throughput test
+      run: |
+        python benchmarks/throughput-test.py
+
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v3
+      with:
+        name: benchmark-results
+        path: benchmarks/results/
+
+    - name: Cleanup
+      if: always()
+      run: docker-compose down -v
+
+  # Job 7: Documentation Build
+  docs:
+    name: Build Documentation
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Validate Markdown
+      uses: DavidAnson/

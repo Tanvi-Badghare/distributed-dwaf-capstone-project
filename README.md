@@ -17,7 +17,7 @@ and STIX/TAXII for threat sharing.
 ## Quick Start
 make demo
 
-## Contributors
+
 ## Authors and Contributions
 
 - **Tanvi Badghare** led the project, designed the system architecture, and developed the Zero-Knowledge Proof–based privacy validation layer.
