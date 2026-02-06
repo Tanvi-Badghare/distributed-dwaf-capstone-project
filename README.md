@@ -18,4 +18,11 @@ and STIX/TAXII for threat sharing.
 make demo
 
 ## Contributors
-(Names + roles)
+## Authors and Contributions
+
+- **Tanvi Badghare** led the project, designed the system architecture, and developed the Zero-Knowledge Proof–based privacy validation layer.
+- **Aditi Pandey** and **Anjali** implemented and evaluated the machine learning–based threat detection components.
+- **Jivesh Rai** developed the STIX/TAXII threat intelligence distribution module.
+- **Anshul** contributed to technical documentation and repository organization.
+
+
