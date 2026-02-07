@@ -25,4 +25,8 @@ make demo
 - **Jivesh Rai** developed the STIX/TAXII threat intelligence distribution module.
 - **Anshul** contributed to technical documentation and repository organization.
 
+## ⚠️ Security & Key Management (TODO)
 
+- Cryptographic keys and ZKP parameters currently included are **demo/testing only**
+- Production-safe key generation and secure storage will be added later
+- Keys will be excluded from version control before final deployment
