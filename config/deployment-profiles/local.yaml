@@ -1,0 +1,6 @@
+mode: local
+
+services:
+  consensus_nodes: 1
+  zkp_enabled: false
+  monitoring: false
