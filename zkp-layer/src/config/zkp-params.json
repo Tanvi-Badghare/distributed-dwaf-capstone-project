@@ -1,9 +1,26 @@
 {
+  "version": "1.0",
   "proof_system": "groth16",
   "curve": "bn254",
-  "circuit": "ml_inference",
-  "public_inputs": [
-    "threat_flag",
-    "confidence_bucket"
-  ]
+  "security_level_bits": 128,
+
+  "circuit": {
+    "name": "ml_inference",
+    "version": "v1",
+    "public_inputs": [
+      "threat_flag",
+      "confidence_bucket"
+    ]
+  },
+
+  "trusted_setup": {
+    "proving_key_path": "zkp/keys/proving.key",
+    "verifying_key_path": "zkp/keys/verifying.key",
+    "setup_hash": "REPLACE_WITH_GENERATED_HASH"
+  },
+
+  "proof_generation": {
+    "timeout_seconds": 15,
+    "aggregation_enabled": false
+  }
 }
