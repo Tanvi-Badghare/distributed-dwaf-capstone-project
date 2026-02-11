@@ -1,9 +1,0 @@
-{
-  "proof_system": "groth16",
-  "curve": "bn254",
-  "circuit": "ml_inference",
-  "public_inputs": [
-    "threat_flag",
-    "confidence_bucket"
-  ]
-}
