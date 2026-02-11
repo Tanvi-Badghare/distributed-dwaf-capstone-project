@@ -1,0 +1,25 @@
+[node]
+id = "node0"
+listen_addr = "0.0.0.0:26656"
+role = "validator"  # validator | observer | gateway
+
+[network]
+peers = [
+  "node1:26656",
+  "node2:26656",
+  "node3:26656"
+]
+
+[consensus]
+algorithm = "tendermint"
+validators = 4
+
+[timeouts]
+propose_ms = 3000
+vote_ms = 3000
+commit_ms = 5000
+
+[security]
+enable_zkp_verification = true
+require_signed_messages = true
+

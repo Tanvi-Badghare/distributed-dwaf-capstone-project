@@ -1,0 +1,9 @@
+mode: demo
+
+services:
+  consensus_nodes: 4
+  zkp_enabled: true
+  monitoring: true
+
+consensus:
+  algorithm: tendermint
