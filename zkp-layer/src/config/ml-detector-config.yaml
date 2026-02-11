@@ -1,11 +1,25 @@
+version: 1.0
+environment: local   # local | demo | production
+
 model:
   type: ensemble
   isolation_forest_path: models/isolation_forest.pkl
   random_forest_path: models/random_forest.pkl
+  validate_on_startup: true
+  explainability_enabled: true
 
 thresholds:
   anomaly_score: 0.75
+  confidence_min: 0.60
 
 api:
   host: 0.0.0.0
   port: 8000
+  request_timeout_seconds: 10
+  rate_limit_per_minute: 120
+
+logging:
+  level: INFO         # DEBUG | INFO | WARN | ERROR
+  structured: true
+  file: logs/ml-detector.log
+
