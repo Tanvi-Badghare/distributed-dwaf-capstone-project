@@ -1,0 +1,18 @@
+version: 1.0
+environment: local   # local | demo | production
+
+services:
+  ml_detector: http://ml-detector:8000
+  zkp_layer: http://zkp-layer:9000
+  validator_network: http://validator-0:7000
+  taxii_server: http://taxii-server:5000
+  feedback_service: http://feedback-service:6000
+
+pipeline:
+  enable_stage_v_feedback: true
+  retry_attempts: 3
+  request_timeout_seconds: 5
+
+logging:
+  level: INFO
+  structured: true
