@@ -27,19 +27,17 @@ services:
       - waf-network
 
   # ===============================
-  # Consensus Nodes (BFT)
+  # Validator Network (Threshold Voting)
   # ===============================
-
   consensus-node0:
     build: ./consensus
     container_name: waf-consensus-node0
     ports:
       - "8081:8081"
-      - "26656:26656"
-      - "26657:26657"
     environment:
       NODE_ID: node0
-      CONSENSUS_NODES: 4
+      TOTAL_VALIDATORS: 4
+      APPROVAL_THRESHOLD: 3
     volumes:
       - ./consensus/config:/app/config:ro
       - consensus-node0-data:/app/data
@@ -59,12 +57,18 @@ services:
       - "8181:8081"
     environment:
       NODE_ID: node1
-      CONSENSUS_NODES: 4
+      TOTAL_VALIDATORS: 4
+      APPROVAL_THRESHOLD: 3
     volumes:
       - ./consensus/config:/app/config:ro
       - consensus-node1-data:/app/data
     depends_on:
       - consensus-node0
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8081/health || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
     networks:
       - waf-network
@@ -76,12 +80,18 @@ services:
       - "8281:8081"
     environment:
       NODE_ID: node2
-      CONSENSUS_NODES: 4
+      TOTAL_VALIDATORS: 4
+      APPROVAL_THRESHOLD: 3
     volumes:
       - ./consensus/config:/app/config:ro
       - consensus-node2-data:/app/data
     depends_on:
       - consensus-node0
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8081/health || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
     networks:
       - waf-network
@@ -93,12 +103,18 @@ services:
       - "8381:8081"
     environment:
       NODE_ID: node3
-      CONSENSUS_NODES: 4
+      TOTAL_VALIDATORS: 4
+      APPROVAL_THRESHOLD: 3
     volumes:
       - ./consensus/config:/app/config:ro
       - consensus-node3-data:/app/data
     depends_on:
       - consensus-node0
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8081/health || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
     networks:
       - waf-network
@@ -106,7 +122,6 @@ services:
   # ===============================
   # ML Detector
   # ===============================
-
   ml-detector:
     build: ./ml-detector
     container_name: waf-ml
@@ -129,7 +144,6 @@ services:
   # ===============================
   # TAXII Server
   # ===============================
-
   taxii-server:
     build: ./taxii-server
     container_name: waf-taxii
@@ -150,9 +164,8 @@ services:
       - waf-network
 
   # ===============================
-  # Orchestrator (Integration Profile)
+  # Orchestrator
   # ===============================
-
   orchestrator:
     build: ./orchestrator
     container_name: waf-orchestrator
@@ -178,7 +191,6 @@ services:
   # ===============================
   # Monitoring (Optional)
   # ===============================
-
   prometheus:
     image: prom/prometheus:latest
     ports:
@@ -212,7 +224,6 @@ services:
 # ===============================
 # Networks
 # ===============================
-
 networks:
   waf-network:
     driver: bridge
@@ -220,7 +231,6 @@ networks:
 # ===============================
 # Volumes
 # ===============================
-
 volumes:
   consensus-node0-data:
   consensus-node1-data:
