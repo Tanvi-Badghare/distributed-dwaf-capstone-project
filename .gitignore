@@ -1,10 +1,32 @@
+# Rust
 **/target/
+
+# Python
 **/__pycache__/
+**/*.pyc
+
+# Model artifacts
 **/*.pkl
-**/*.bin
-.env
-node_modules/
-.DS_Store
-zkp/keys/
-logs/
 models/
+
+# ZKP keys & parameters
+zkp-layer/params/
+**/*.bin
+
+# Environment variables
+.env
+
+# Node (if frontend exists)
+node_modules/
+
+# Logs
+logs/
+**/*.log
+
+# OS
+.DS_Store
+
+# Temporary / misc
+*.tmp
+*.swp
+
