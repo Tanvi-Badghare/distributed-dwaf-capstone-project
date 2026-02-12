@@ -12,6 +12,13 @@ thresholds:
   anomaly_score: 0.75
   confidence_min: 0.60
 
+confidence_bucket:
+  strategy: discretize
+  buckets:
+    - 0.60
+    - 0.75
+    - 0.90
+
 api:
   host: 0.0.0.0
   port: 8000
@@ -22,4 +29,3 @@ logging:
   level: INFO         # DEBUG | INFO | WARN | ERROR
   structured: true
   file: logs/ml-detector.log
-
