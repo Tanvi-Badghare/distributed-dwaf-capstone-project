@@ -6,4 +6,6 @@ services:
   monitoring: true
 
 consensus:
-  algorithm: tendermint
+  algorithm: threshold-voting
+  approval_threshold: 3
+
