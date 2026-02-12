@@ -1,25 +1,27 @@
 [node]
 id = "node0"
-listen_addr = "0.0.0.0:26656"
+listen_addr = "0.0.0.0:7000"
 role = "validator"  # validator | observer | gateway
 
 [network]
 peers = [
-  "node1:26656",
-  "node2:26656",
-  "node3:26656"
+  "node1:7000",
+  "node2:7000",
+  "node3:7000"
 ]
 
 [consensus]
-algorithm = "tendermint"
-validators = 4
+algorithm = "threshold-voting"
+total_validators = 4
+approval_threshold = 3
 
 [timeouts]
-propose_ms = 3000
+verification_ms = 3000
 vote_ms = 3000
 commit_ms = 5000
 
 [security]
 enable_zkp_verification = true
 require_signed_messages = true
+
 
