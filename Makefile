@@ -1,4 +1,4 @@
-.PHONY: all setup install-deps build build-no-cache up up-all down restart logs clean test benchmark demo help
+.PHONY: all setup install-deps build build-no-cache up up-all down restart logs clean test benchmark demo help health status
 
 # Default target
 all: help
@@ -28,17 +28,19 @@ build: ## Build all Docker images
 build-no-cache: ## Build without cache
 	@docker compose build --no-cache
 
-up: ## Start core services
+up: ## Start core distributed pipeline
 	@echo "🚀 Starting core services..."
-	@docker compose up -d zkp-layer ml-detector taxii-server orchestrator
-	@sleep 10
+	@docker compose up -d zkp-layer consensus-node0 ml-detector taxii-server orchestrator
+	@sleep 12
 	@make health
-	@echo "✅ Services running!"
+	@echo "✅ Core services running!"
 
-up-all: ## Start all services with profiles
-	@docker compose --profile integration --profile sites --profile monitoring up -d
-	@sleep 15
+up-all: ## Start full distributed stack with monitoring
+	@echo "🌐 Starting full distributed stack..."
+	@docker compose --profile integration --profile monitoring up -d
+	@sleep 20
 	@make health
+	@echo "✅ Full stack running!"
 
 down: ## Stop all services
 	@docker compose down
@@ -57,11 +59,15 @@ logs-ml:
 logs-taxii:
 	@docker compose logs -f taxii-server
 
-##@ Health
+logs-consensus:
+	@docker compose logs -f consensus-node0
+
+##@ Health & Status
 
 health: ## Fail if any core service is down
 	@echo "🏥 Checking health..."
 	@curl -sf http://localhost:8080/health > /dev/null || (echo "❌ ZKP Down" && exit 1)
+	@curl -sf http://localhost:8081/health > /dev/null || (echo "❌ Consensus Down" && exit 1)
 	@curl -sf http://localhost:8082/health > /dev/null || (echo "❌ ML Down" && exit 1)
 	@curl -sf http://localhost:8083/health > /dev/null || (echo "❌ TAXII Down" && exit 1)
 	@echo "✅ All services healthy"
@@ -97,7 +103,7 @@ benchmark-zkp:
 
 ##@ Demo
 
-demo:
+demo: ## Start demo mode
 	@./scripts/start-demo.sh || true
 
 ##@ Cleanup
@@ -105,7 +111,6 @@ demo:
 clean: ## Safe cleanup
 	@docker compose down -v
 	@rm -rf zkp-layer/target
-	@rm -rf ml-detector/models/*.pkl 2>/dev/null || true
 	@rm -rf benchmarks/results/* 2>/dev/null || true
 	@echo "✅ Cleanup complete"
 
@@ -115,5 +120,5 @@ help:
 	@echo ""
 	@echo "Distributed WAF - Available Commands"
 	@echo ""
-	@awk 'BEGIN {FS = ":.*##"; printf "Usage:\n  make <target>\n\n"} /^[a-zA-Z_-]+:.*?##/ { printf "  %-18s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*##"; printf "Usage:\n  make <target>\n\n"} /^[a-zA-Z_-]+:.*?##/ { printf "  %-20s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 	@echo ""
