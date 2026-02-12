@@ -8,39 +8,37 @@
 ## Architecture
 DWAF operates as a multi-stage security pipeline:
 
-• **Federated ML-Based Anomaly Detection**
+1) **Federated ML-Based Anomaly Detection**
 - Real-time inference using ensemble models (Isolation Forest + Random Forest) on distributed traffic streams.
 
-• **Zero-Knowledge Threat Attestation (Groth16)**
+2) **Zero-Knowledge Threat Attestation (Groth16)**
 - Generates succinct non-interactive proofs of malicious inference without exposing raw traffic features.
 
-• **Distributed Validator Voting Protocol**
+3) **Distributed Validator Voting Protocol**
 - Independent validator nodes verify ZKP correctness and reach agreement using threshold-based majority voting.
 
-• **Structured Threat Intelligence Dissemination (STIX 2.1 / TAXII 2.1)**
+4) **Structured Threat Intelligence Dissemination (STIX 2.1 / TAXII 2.1)**
 - Validated threats are encoded as STIX objects and distributed via TAXII collections to participating WAF nodes.
 
-• **Adaptive Federated Mitigation**
+5) **Adaptive Federated Mitigation**
 - Approved threat indicators update enforcement rules and inform local model adaptation across nodes.
 
-<p align="center">
-  <img src="./docs/dwaf-capstone-flowchart.png" width="850">
-</p>
+![Architectural Diagram](./docs/dwaf-capstone-flowchart.png)
 
 ## Core Components
-• **🔍 Federated ML-Based Detection**
+(I) **🔍 Federated ML-Based Detection**
 - Ensemble anomaly detection (Isolation Forest + Random Forest)
 
-• **🔐 Zero-Knowledge Threat Attestation (Groth16)**
+(II) **🔐 Zero-Knowledge Threat Attestation (Groth16)**
 - Proves malicious inference without exposing raw traffic data
 
-• **🗳 Distributed Validator Voting**
+(III) **🗳 Distributed Validator Voting**
 - Multi-node threshold-based verification of ZKP proofs
 
-• **🌐 Structured Threat Sharing (STIX 2.1 / TAXII 2.1)**
+(IV) **🌐 Structured Threat Sharing (STIX 2.1 / TAXII 2.1)**
 - Standardised intelligence dissemination across nodes
 
-• **🔄 Adaptive Federated Mitigation**
+(V) **🔄 Adaptive Federated Mitigation**
 - Validated threats update enforcement rules and inform model adaptation
 
 ## Tech Stack
@@ -74,7 +72,7 @@ make demo
 - **Anshul** contributed to technical documentation, system structuring, and repository organization.
 
 ## Research Context
-• DWAF is an experimental exploration of combining:
+DWAF is an experimental exploration of combining:
 - Privacy-preserving cryptography
 - Distributed validation
 - Standardised cyber threat intelligence
