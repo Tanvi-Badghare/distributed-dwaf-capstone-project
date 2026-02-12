@@ -17,10 +17,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Python
-      - uses: actions/setup-python@v4
+      # ------------------------
+      # Python Lint
+      # ------------------------
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.10"
+          cache: "pip"
 
       - name: Install flake8
         run: pip install flake8
@@ -28,12 +31,12 @@ jobs:
       - name: Python Lint
         run: flake8 ml-detector/ taxii-server/ --max-line-length=120 --ignore=E501
 
-      # Rust
-      - uses: actions-rs/toolchain@v1
+      # ------------------------
+      # Rust Lint
+      # ------------------------
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
           components: rustfmt, clippy
-          override: true
 
       - name: Rust Format Check
         working-directory: zkp-layer
@@ -50,10 +53,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Python
-      - uses: actions/setup-python@v4
+      # ------------------------
+      # Python Tests
+      # ------------------------
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.10"
+          cache: "pip"
 
       - name: Install Python Dependencies
         run: |
@@ -62,17 +68,16 @@ jobs:
           pip install pytest
 
       - name: Run Python Tests
-        run: pytest tests/unit/ || true
+        run: pytest tests/unit/
 
-      # Rust
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
+      # ------------------------
+      # Rust Tests
+      # ------------------------
+      - uses: dtolnay/rust-toolchain@stable
 
       - name: Run Rust Tests
         working-directory: zkp-layer
-        run: cargo test
+        run: cargo test --all
 
   build-images:
     runs-on: ubuntu-latest
@@ -106,3 +111,19 @@ jobs:
           file: ./taxii-server/Dockerfile
           push: false
           tags: dwaf-taxii:test
+
+      - name: Build Orchestrator
+        uses: docker/build-push-action@v5
+        with:
+          context: ./orchestrator
+          file: ./orchestrator/Dockerfile
+          push: false
+          tags: dwaf-orchestrator:test
+
+      - name: Build Consensus Node
+        uses: docker/build-push-action@v5
+        with:
+          context: ./consensus
+          file: ./consensus/Dockerfile
+          push: false
+          tags: dwaf-consensus:test
