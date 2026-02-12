@@ -4,3 +4,8 @@ services:
   consensus_nodes: 1
   zkp_enabled: false
   monitoring: false
+
+consensus:
+  algorithm: single-node
+  approval_threshold: 1
+
