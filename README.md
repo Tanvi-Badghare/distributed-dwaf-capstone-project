@@ -50,19 +50,19 @@ DWAF operates as a multi-stage security pipeline:
 
 ## Quick Start
 1️⃣ Build Services
-make build
+- make build
 
 2️⃣ Start Core Services
-make up
+- make up
 
 3️⃣ Run Full Integration 
-make up-all
+- make up-all
 
 4️⃣ Check Health
-make health
+- make health
 
 5️⃣ Run Demo
-make demo
+- make demo
 
 
 ## Authors and Contributions
