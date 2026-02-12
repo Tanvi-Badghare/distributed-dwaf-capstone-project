@@ -14,8 +14,8 @@
   },
 
   "trusted_setup": {
-    "proving_key_path": "zkp/keys/proving.key",
-    "verifying_key_path": "zkp/keys/verifying.key",
+    "proving_key_path": "params/proving_key.bin",
+    "verifying_key_path": "params/verification_key.bin",
     "setup_hash": "REPLACE_WITH_GENERATED_HASH"
   },
 
