@@ -1,0 +1,71 @@
+# ============================================================================
+# Stage 1: Build Stage
+# ============================================================================
+FROM rust:1.75.0-slim-bookworm AS builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config \
+    libssl-dev \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app directory
+WORKDIR /app
+
+# Pre-copy manifests for dependency caching
+COPY Cargo.toml Cargo.lock ./
+
+# Create dummy source to cache dependencies
+RUN mkdir src && \
+    echo "fn main() { println!(\"build-cache\"); }" > src/main.rs && \
+    cargo build --release && \
+    rm -rf src
+
+# Copy actual source
+COPY src ./src
+
+# Build optimized release binary
+RUN cargo build --release && \
+    strip target/release/zkp-waf
+
+# ============================================================================
+# Stage 2: Runtime Stage
+# ============================================================================
+FROM debian:bookworm-slim
+
+# Install only minimal runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    libssl3 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN useradd --create-home --uid 1000 --shell /usr/sbin/nologin zkpuser
+
+WORKDIR /app
+
+# Create params directory (public proving/verifying keys)
+RUN mkdir -p /app/params
+
+# Copy binary with correct ownership
+COPY --from=builder --chown=zkpuser:zkpuser \
+    /app/target/release/zkp-waf \
+    /app/zkp-waf
+
+# Copy params (if present in repo)
+COPY --chown=zkpuser:zkpuser params /app/params
+
+# Switch to non-root user
+USER zkpuser
+
+# Expose service port
+EXPOSE 8080
+
+# Health check endpoint
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+# Run application
+ENTRYPOINT ["/app/zkp-waf"]
