@@ -1,23 +1,18 @@
 [package]
 name = "zkp-waf"
 version = "0.1.0"
-edition = "2026"
-authors = ["capstone"]
+edition = "2021"
+authors = ["Tanvi Badghare"]
 description = "Zero-Knowledge Proof layer for privacy-preserving ML inference verification"
-license = "MIT"
-repository = "https://github.com/Tanvi-Badghare/distributed-dwaf-capstone-project/tree/main/zkp-layer"
 
 [[bin]]
 name = "zkp-waf"
 path = "src/main.rs"
 
-# ----------------------------
-# Dependencies
-# ----------------------------
-
 [dependencies]
-
-# ---- Arkworks zk-SNARK stack (Groth16 over BN254) ----
+# ----------------------------
+# Arkworks zk-SNARK stack
+# ----------------------------
 ark-std = { version = "0.4", default-features = false }
 ark-ff = { version = "0.4", default-features = false }
 ark-ec = { version = "0.4", default-features = false }
@@ -26,35 +21,41 @@ ark-relations = { version = "0.4", default-features = false }
 ark-r1cs-std = { version = "0.4", default-features = false }
 ark-groth16 = { version = "0.4", default-features = false }
 ark-bn254 = { version = "0.4", default-features = false }
-
-# Optional but recommended for hash commitments
 ark-crypto-primitives = { version = "0.4", default-features = false }
 
-# ---- Web server (Actix uses Tokio internally) ----
+# ----------------------------
+# Web server
+# ----------------------------
 actix-web = "4.4"
 tokio = { version = "1.35", features = ["macros", "rt-multi-thread"] }
 
-# ---- Serialization ----
+# ----------------------------
+# Serialization
+# ----------------------------
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
-# ---- Hashing for model commitments (outside circuit) ----
+# ----------------------------
+# Model commitment hashing
+# ----------------------------
 sha2 = "0.10"
 
-# ---- Proof encoding ----
+# ----------------------------
+# Proof transport encoding
+# ----------------------------
 base64 = "0.21"
 
-# ---- Logging / Observability ----
+# ----------------------------
+# Logging (structured)
+# ----------------------------
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
-# ---- Error handling ----
-thiserror = "1.0"
+# ----------------------------
+# Error handling
+# ----------------------------
 anyhow = "1.0"
-
-# ----------------------------
-# Features
-# ----------------------------
+thiserror = "1.0"
 
 [features]
 default = ["std"]
@@ -69,10 +70,6 @@ std = [
     "ark-crypto-primitives/std"
 ]
 
-# ----------------------------
-# Build Profiles
-# ----------------------------
-
 [profile.release]
 opt-level = 3
 lto = true
@@ -81,4 +78,3 @@ panic = "abort"
 
 [profile.dev]
 opt-level = 0
-
