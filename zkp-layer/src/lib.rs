@@ -1,56 +1,48 @@
 //! ZKP-WAF
 //!
-//! Zero-Knowledge Proof layer for a privacy-preserving Web Application Firewall.
+//! Zero-Knowledge Proof layer for the Distributed Web Application Firewall (DWAF).
 //!
 //! This crate provides:
-//! - ML inference circuit definition (Groth16, BN254)
+//! - Groth16 (BN254) ML inference circuit
+//! - Poseidon-based feature commitments
 //! - Proof generation (Prover)
-//! - Proof verification (Verifier)
-//! - Utility helpers and error handling
+//! - Proof verification with validator policy enforcement
+//! - Utility helpers and structured error handling
 //!
-//! Designed for integration as a service layer inside DWAF.
+//! Designed to operate as a cryptographic service layer
+//! inside the DWAF federated security architecture.
 
 #![forbid(unsafe_code)]
 
-use std::sync::Once;
-
-static INIT: Once = Once::new();
-
-// Public modules
+/// Circuit definitions
 pub mod circuits;
+
+/// Proof generation logic
 pub mod prover;
+
+/// Proof verification and validator policy enforcement
 pub mod verifier;
+
+/// Utility helpers (serialization, hashing, encoding)
 pub mod utils;
+
+/// Error types
 pub mod errors;
 
-// Re-export commonly used types
-pub use circuits::ml_inference_circuit::{MLInferenceCircuit, NSLKDDFeatures};
-pub use prover::{setup_prover, generate_proof, ProofData};
-pub use verifier::{setup_verifier, verify_proof};
-pub use errors::ZKPError;
+// -----------------------------------------------------
+// Public Re-Exports (Stable Integration Surface)
+// -----------------------------------------------------
 
-/// Initializes the ZKP system runtime.
-///
-/// Safe to call multiple times.
-/// Sets up structured logging if not already initialized.
-pub fn init() {
-    INIT.call_once(|| {
-        tracing_subscriber::fmt()
-            .with_target(false)
-            .with_level(true)
-            .init();
+pub use circuits::MLInferenceCircuit;
 
-        tracing::info!("ZKP-WAF system initialized");
-    });
-}
+pub use prover::{
+    generate_proof,
+    setup_prover,
+    load_proving_key,
+    save_proving_key,
+    ProofData,
+};
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+pub use verifier::validator_verify_threat;
 
-    #[test]
-    fn test_init_multiple_calls_safe() {
-        init();
-        init(); // should not panic
-    }
-}
+pub use errors::{Result, ZKPError};
