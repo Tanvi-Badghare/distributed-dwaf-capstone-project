@@ -1,16 +1,16 @@
 //! ZKP-WAF API Server
-//! REST API for zero-knowledge ML inference proof generation & verification
+//! REST interface for Groth16 proof generation & verification
 
 use actix_web::{
     middleware,
     web, App, HttpResponse, HttpServer, Result as ActixResult,
 };
-use ark_bn254::Bn254;
+use ark_bn254::{Bn254, Fr};
 use ark_groth16::{ProvingKey, VerifyingKey};
+use ark_sponge::poseidon::PoseidonConfig;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
-use log::{error, info, warn};
+use log::{error, info};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 use std::time::{Instant, SystemTime};
 
@@ -21,10 +21,8 @@ mod utils;
 mod verifier;
 
 use crate::errors::ZKPError;
-use crate::prover::{generate_proof, load_proving_key, save_proving_key, setup_prover};
-use crate::verifier::{
-    load_verification_key, save_verification_key, setup_verifier, verify_proof,
-};
+use crate::prover::{generate_proof};
+use crate::verifier::validator_verify_threat;
 
 // ============================================================================
 // APPLICATION STATE
@@ -34,18 +32,8 @@ use crate::verifier::{
 struct AppState {
     proving_key: Arc<RwLock<Option<ProvingKey<Bn254>>>>,
     verification_key: Arc<RwLock<Option<VerifyingKey<Bn254>>>>,
-    stats: Arc<RwLock<ServiceStats>>,
+    poseidon_config: PoseidonConfig<Fr>,
     start_time: SystemTime,
-}
-
-#[derive(Clone, Debug, Default)]
-struct ServiceStats {
-    total_proofs_generated: u64,
-    total_proofs_verified: u64,
-    successful_verifications: u64,
-    failed_verifications: u64,
-    total_proof_time_ms: u128,
-    total_verification_time_ms: u128,
 }
 
 // ============================================================================
@@ -79,8 +67,6 @@ struct VerifyProofRequest {
 struct VerifyProofResponse {
     success: bool,
     is_valid: bool,
-    classification: Option<String>,
-    threat_score: Option<f64>,
     verification_time_ms: u128,
     error: Option<String>,
 }
@@ -93,31 +79,6 @@ struct HealthResponse {
     proving_key_loaded: bool,
     verification_key_loaded: bool,
     uptime_seconds: u64,
-}
-
-#[derive(Debug, Serialize)]
-struct StatsResponse {
-    total_proofs_generated: u64,
-    total_proofs_verified: u64,
-    successful_verifications: u64,
-    failed_verifications: u64,
-    success_rate: f64,
-    avg_proof_time_ms: f64,
-    avg_verification_time_ms: f64,
-}
-
-#[derive(Debug, Deserialize)]
-struct SetupRequest {
-    regenerate: Option<bool>,
-}
-
-#[derive(Debug, Serialize)]
-struct SetupResponse {
-    success: bool,
-    proving_key_path: String,
-    verification_key_path: String,
-    setup_time_ms: u128,
-    error: Option<String>,
 }
 
 // ============================================================================
@@ -134,7 +95,7 @@ async fn health_check(data: web::Data<AppState>) -> ActixResult<HttpResponse> {
         .unwrap_or_default()
         .as_secs();
 
-    let response = HealthResponse {
+    Ok(HttpResponse::Ok().json(HealthResponse {
         status: if pk_loaded && vk_loaded {
             "healthy".into()
         } else {
@@ -145,10 +106,10 @@ async fn health_check(data: web::Data<AppState>) -> ActixResult<HttpResponse> {
         proving_key_loaded: pk_loaded,
         verification_key_loaded: vk_loaded,
         uptime_seconds: uptime,
-    };
-
-    Ok(HttpResponse::Ok().json(response))
+    }))
 }
+
+// ----------------------------------------------------------------------------
 
 async fn generate_proof_endpoint(
     req: web::Json<GenerateProofRequest>,
@@ -166,7 +127,7 @@ async fn generate_proof_endpoint(
                     proof: None,
                     public_inputs: None,
                     generation_time_ms: 0,
-                    error: Some("Proving key not loaded. Call /setup".into()),
+                    error: Some("Proving key not loaded".into()),
                 },
             ))
         }
@@ -178,22 +139,25 @@ async fn generate_proof_endpoint(
         &req.classification,
         req.threat_score,
         pk,
+        data.poseidon_config.clone(),
     ) {
         Ok(proof_data) => {
             let elapsed = start.elapsed().as_millis();
 
+            // Encode proof
             let proof_base64 = BASE64.encode(&proof_data.proof_bytes);
 
-            {
-                let mut stats = data.stats.write().unwrap();
-                stats.total_proofs_generated += 1;
-                stats.total_proof_time_ms += elapsed;
-            }
+            // Encode public inputs
+            let public_inputs_encoded: Vec<String> = proof_data
+                .public_inputs
+                .iter()
+                .map(|bytes| BASE64.encode(bytes))
+                .collect();
 
             Ok(HttpResponse::Ok().json(GenerateProofResponse {
                 success: true,
                 proof: Some(proof_base64),
-                public_inputs: Some(proof_data.public_inputs),
+                public_inputs: Some(public_inputs_encoded),
                 generation_time_ms: elapsed,
                 error: None,
             }))
@@ -213,6 +177,8 @@ async fn generate_proof_endpoint(
     }
 }
 
+// ----------------------------------------------------------------------------
+
 async fn verify_proof_endpoint(
     req: web::Json<VerifyProofRequest>,
     data: web::Data<AppState>,
@@ -227,24 +193,21 @@ async fn verify_proof_endpoint(
                 VerifyProofResponse {
                     success: false,
                     is_valid: false,
-                    classification: None,
-                    threat_score: None,
                     verification_time_ms: 0,
-                    error: Some("Verification key not loaded. Call /setup".into()),
+                    error: Some("Verification key not loaded".into()),
                 },
             ))
         }
     };
 
+    // Decode proof
     let proof_bytes = match BASE64.decode(&req.proof) {
-        Ok(b) => b,
+        Ok(bytes) => bytes,
         Err(_) => {
             return Ok(HttpResponse::BadRequest().json(
                 VerifyProofResponse {
                     success: false,
                     is_valid: false,
-                    classification: None,
-                    threat_score: None,
                     verification_time_ms: 0,
                     error: Some("Invalid base64 proof".into()),
                 },
@@ -252,82 +215,47 @@ async fn verify_proof_endpoint(
         }
     };
 
-    match verify_proof(&proof_bytes, &req.public_inputs, vk) {
-        Ok(result) => {
-            let elapsed = start.elapsed().as_millis();
-
-            {
-                let mut stats = data.stats.write().unwrap();
-                stats.total_proofs_verified += 1;
-                stats.total_verification_time_ms += elapsed;
-
-                if result.is_valid {
-                    stats.successful_verifications += 1;
-                } else {
-                    stats.failed_verifications += 1;
-                }
+    // Decode public inputs
+    let mut public_inputs_bytes = Vec::new();
+    for input in &req.public_inputs {
+        match BASE64.decode(input) {
+            Ok(bytes) => public_inputs_bytes.push(bytes),
+            Err(_) => {
+                return Ok(HttpResponse::BadRequest().json(
+                    VerifyProofResponse {
+                        success: false,
+                        is_valid: false,
+                        verification_time_ms: 0,
+                        error: Some("Invalid base64 public input".into()),
+                    },
+                ))
             }
+        }
+    }
+
+    match validator_verify_threat(&proof_bytes, &public_inputs_bytes, vk) {
+        Ok(is_valid) => {
+            let elapsed = start.elapsed().as_millis();
 
             Ok(HttpResponse::Ok().json(VerifyProofResponse {
                 success: true,
-                is_valid: result.is_valid,
-                classification: Some(result.classification),
-                threat_score: Some(result.threat_score),
+                is_valid,
                 verification_time_ms: elapsed,
                 error: None,
             }))
         }
         Err(e) => {
-            error!("Verification error: {}", e);
-
+            error!("Verification failed: {}", e);
             Ok(HttpResponse::InternalServerError().json(
                 VerifyProofResponse {
                     success: false,
                     is_valid: false,
-                    classification: None,
-                    threat_score: None,
                     verification_time_ms: start.elapsed().as_millis(),
                     error: Some(e.to_string()),
                 },
             ))
         }
     }
-}
-
-async fn stats_endpoint(data: web::Data<AppState>) -> ActixResult<HttpResponse> {
-    let stats = data.stats.read().unwrap();
-
-    let success_rate = if stats.total_proofs_verified > 0 {
-        (stats.successful_verifications as f64
-            / stats.total_proofs_verified as f64)
-            * 100.0
-    } else {
-        0.0
-    };
-
-    let avg_proof = if stats.total_proofs_generated > 0 {
-        stats.total_proof_time_ms as f64
-            / stats.total_proofs_generated as f64
-    } else {
-        0.0
-    };
-
-    let avg_verify = if stats.total_proofs_verified > 0 {
-        stats.total_verification_time_ms as f64
-            / stats.total_proofs_verified as f64
-    } else {
-        0.0
-    };
-
-    Ok(HttpResponse::Ok().json(StatsResponse {
-        total_proofs_generated: stats.total_proofs_generated,
-        total_proofs_verified: stats.total_proofs_verified,
-        successful_verifications: stats.successful_verifications,
-        failed_verifications: stats.failed_verifications,
-        success_rate,
-        avg_proof_time_ms: avg_proof,
-        avg_verification_time_ms: avg_verify,
-    }))
 }
 
 // ============================================================================
@@ -338,24 +266,25 @@ async fn stats_endpoint(data: web::Data<AppState>) -> ActixResult<HttpResponse> 
 async fn main() -> std::io::Result<()> {
     env_logger::init();
 
+    info!("Starting ZKP-WAF API...");
+
+    // TODO: Replace with your actual Poseidon parameters
+    let poseidon_config = PoseidonConfig::<Fr>::default();
+
     let app_state = web::Data::new(AppState {
         proving_key: Arc::new(RwLock::new(None)),
         verification_key: Arc::new(RwLock::new(None)),
-        stats: Arc::new(RwLock::new(ServiceStats::default())),
+        poseidon_config,
         start_time: SystemTime::now(),
     });
-
-    info!("ZKP-WAF v{} starting...", env!("CARGO_PKG_VERSION"));
 
     HttpServer::new(move || {
         App::new()
             .app_data(app_state.clone())
             .wrap(middleware::Logger::default())
-            .wrap(middleware::Compress::default())
             .route("/health", web::get().to(health_check))
             .route("/generate-proof", web::post().to(generate_proof_endpoint))
             .route("/verify-proof", web::post().to(verify_proof_endpoint))
-            .route("/stats", web::get().to(stats_endpoint))
     })
     .bind(("0.0.0.0", 8080))?
     .workers(4)
