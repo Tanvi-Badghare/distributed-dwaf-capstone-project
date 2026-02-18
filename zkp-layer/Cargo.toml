@@ -23,6 +23,16 @@ ark-groth16 = { version = "0.4", default-features = false }
 ark-bn254 = { version = "0.4", default-features = false }
 ark-crypto-primitives = { version = "0.4", default-features = false }
 
+[[bench]]
+name = "proof_generation"
+harness = false 
+[[bench]] 
+name = "proof_verification" 
+harness = false 
+[[bench]] 
+name = "commitment_hash" 
+harness = false
+
 # ----------------------------
 # Web server
 # ----------------------------
