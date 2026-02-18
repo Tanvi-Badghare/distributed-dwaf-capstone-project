@@ -1,26 +1,45 @@
 {
-  "version": "1.0",
+  "version": "2.0",
   "proof_system": "groth16",
   "curve": "bn254",
   "security_level_bits": 128,
 
   "circuit": {
-    "name": "ml_inference",
-    "version": "v1",
+    "name": "ml_inference_poseidon",
+    "version": "v2",
+    "description": "Zero-knowledge proof of ML inference with Poseidon commitments",
     "public_inputs": [
-      "threat_flag",
-      "confidence_bucket"
-    ]
+      "feature_commitment",
+      "model_hash",
+      "classification_result",
+      "threat_score_bucket"
+    ],
+    "feature_vector_size": 41,
+    "model_weight_size": 12
+  },
+
+  "hashing": {
+    "commitment_scheme": "poseidon",
+    "domain_separation": true
   },
 
   "trusted_setup": {
     "proving_key_path": "params/proving_key.bin",
     "verifying_key_path": "params/verification_key.bin",
-    "setup_hash": "REPLACE_WITH_GENERATED_HASH"
+    "ceremony_required": true,
+    "toxic_waste_destroyed": true,
+    "setup_hash": "REPLACE_WITH_ACTUAL_HASH_OF_VK"
   },
 
   "proof_generation": {
     "timeout_seconds": 15,
+    "max_memory_mb": 1024,
     "aggregation_enabled": false
+  },
+
+  "verification_policy": {
+    "malicious_threshold": 0.7,
+    "enforce_threshold_check": true
   }
 }
+
