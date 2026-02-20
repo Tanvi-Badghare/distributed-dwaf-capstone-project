@@ -9,6 +9,18 @@ description = "Zero-Knowledge Proof layer for privacy-preserving ML inference ve
 name = "zkp-waf"
 path = "src/main.rs"
 
+[[bench]]
+name = "proof_generation"
+harness = false
+
+[[bench]]
+name = "proof_verification"
+harness = false
+
+[[bench]]
+name = "commitment_hash"
+harness = false
+
 [dependencies]
 # ----------------------------
 # Arkworks zk-SNARK stack
@@ -22,19 +34,6 @@ ark-r1cs-std = { version = "0.4", default-features = false }
 ark-groth16 = { version = "0.4", default-features = false }
 ark-bn254 = { version = "0.4", default-features = false }
 ark-crypto-primitives = { version = "0.4", default-features = false }
-
-[dev-dependencies]
-criterion = "0.5"
-
-[[bench]]
-name = "proof_generation"
-harness = false 
-[[bench]] 
-name = "proof_verification" 
-harness = false 
-[[bench]] 
-name = "commitment_hash" 
-harness = false
 
 # ----------------------------
 # Web server
@@ -69,6 +68,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # ----------------------------
 anyhow = "1.0"
 thiserror = "1.0"
+
+[dev-dependencies]
+criterion = "0.5"
 
 [features]
 default = ["std"]
