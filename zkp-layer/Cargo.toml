@@ -23,6 +23,9 @@ ark-groth16 = { version = "0.4", default-features = false }
 ark-bn254 = { version = "0.4", default-features = false }
 ark-crypto-primitives = { version = "0.4", default-features = false }
 
+[dev-dependencies]
+criterion = "0.5"
+
 [[bench]]
 name = "proof_generation"
 harness = false 
