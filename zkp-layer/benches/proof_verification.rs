@@ -1,37 +1,55 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use zkp_layer::{
-    generate_proof,
-    setup_prover,
-    validator_verify_threat,
-};
-use ark_bn254::Fr;
-use ark_sponge::poseidon::PoseidonConfig;
+use zkp_layer::circuits::ml_inference_circuit::MlInferenceCircuit;
+use zkp_layer::prover::generate_proof;
+use zkp_layer::verifier::verify_proof;
 
-fn bench_proof_verification(c: &mut Criterion) {
-    let poseidon = PoseidonConfig::<Fr>::default();
-    let pk = setup_prover(&poseidon).unwrap();
+use ark_bls12_381::Bls12_381;
+use ark_groth16::{generate_random_parameters, prepare_verifying_key};
+use ark_relations::r1cs::ConstraintSynthesizer;
+use ark_std::test_rng;
 
-    let features = vec![Fr::from(1u64); 41];
-    let weights = vec![Fr::from(2u64); 12];
+/// Benchmarks ONLY proof verification time.
+/// Proof generation is done once before benchmarking.
+fn benchmark_proof_verification(c: &mut Criterion) {
+    // RNG
+    let mut rng = test_rng();
 
-    let proof_data = generate_proof(
-        &pk,
-        &poseidon,
-        features,
-        weights,
-        true,
-        0.85,
-    ).unwrap();
+    // ---- Dummy Test Data ----
+    let features = vec![1u64, 0u64, 1u64, 0u64];
+    let classification = 1u64;
 
+    // ---- Build Circuit Instance ----
+    let circuit = MlInferenceCircuit {
+        features: features.clone(),
+        classification,
+    };
+
+    // ---- Setup (trusted setup simulation) ----
+    let params =
+        generate_random_parameters::<Bls12_381, _, _>(circuit.clone(), &mut rng)
+            .expect("failed to generate parameters");
+
+    let pvk = prepare_verifying_key(&params.vk);
+
+    // ---- Generate Proof Once ----
+    let proof =
+        generate_proof(circuit, &params, &mut rng)
+            .expect("proof generation failed");
+
+    // ---- Public Inputs ----
+    let public_inputs = vec![classification.into()];
+
+    // ---- Benchmark Verification ----
     c.bench_function("proof_verification", |b| {
         b.iter(|| {
-            validator_verify_threat(
-                &proof_data.proof,
-                &proof_data.public_inputs,
-            ).unwrap();
-        });
+            let result =
+                verify_proof(&pvk, &proof, &public_inputs)
+                    .expect("verification failed");
+
+            assert!(result);
+        })
     });
 }
 
-criterion_group!(benches, bench_proof_verification);
+criterion_group!(benches, benchmark_proof_verification);
 criterion_main!(benches);
