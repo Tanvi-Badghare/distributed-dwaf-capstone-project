@@ -4,7 +4,6 @@ use ark_bn254::{Bn254, Fr};
 use ark_groth16::{Groth16, PreparedVerifyingKey, Proof};
 use ark_serialize::CanonicalDeserialize;
 use ark_ff::{PrimeField, BigInteger};
-use ark_snark::SNARK;
 
 use crate::errors::{ZKPError, Result};
 
