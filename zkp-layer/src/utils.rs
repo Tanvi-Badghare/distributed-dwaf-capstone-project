@@ -1,7 +1,7 @@
 //! Utility functions for ZKP operations.
 
 use ark_bn254::Fr;
-use ark_ff::{BigInteger, PrimeField, Zero};
+use ark_ff::{BigInteger, PrimeField};
 use crate::errors::{Result, ZKPError};
 
 /// Fixed-point scaling factor (3 decimal places).
@@ -83,7 +83,7 @@ pub fn floats_to_fields(values: &[f64]) -> Result<Vec<Fr>> {
 /// ⚠️ This is NOT collision resistant.
 /// Replace with Poseidon hash in production.
 pub fn compute_commitment(features: &[Fr]) -> Fr {
-    features.iter().fold(Fr::zero(), |acc, f| acc + f)
+    features.iter().fold(Fr::from(0u64), |acc, f| acc + f)
 }
 
 // ============================================================
