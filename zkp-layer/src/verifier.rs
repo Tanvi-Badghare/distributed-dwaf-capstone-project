@@ -1,9 +1,10 @@
 //! Production-grade ZKP Verifier for Validator Nodes
 
 use ark_bn254::{Bn254, Fr};
-use ark_groth16::{Groth16, VerifyingKey, Proof};
+use ark_groth16::{Groth16, PreparedVerifyingKey, Proof};
 use ark_serialize::CanonicalDeserialize;
-use ark_ff::PrimeField;
+use ark_ff::{PrimeField, BigInteger};
+use ark_snark::SNARK;
 
 use crate::errors::{ZKPError, Result};
 
@@ -18,14 +19,14 @@ pub struct VerificationResult {
 pub fn validator_verify_threat(
     proof_bytes: &[u8],
     public_inputs_bytes: &[Vec<u8>],
-    vk: &VerifyingKey<Bn254>,
+    vk: &PreparedVerifyingKey<Bn254>,
 ) -> Result<bool> {
 
     // -------------------------
     // Deserialize Proof
     // -------------------------
     let proof = Proof::<Bn254>::deserialize_compressed(proof_bytes)
-        .map_err(|e| ZKPError::SerializationError(e.to_string()))?;
+        .map_err(|e| ZKPError::Serialization(e.to_string()))?;
 
     // -------------------------
     // Deserialize Public Inputs
@@ -34,7 +35,7 @@ pub fn validator_verify_threat(
 
     for input_bytes in public_inputs_bytes {
         let field = Fr::deserialize_compressed(&input_bytes[..])
-            .map_err(|e| ZKPError::SerializationError(e.to_string()))?;
+            .map_err(|e| ZKPError::Serialization(e.to_string()))?;
         public_inputs.push(field);
     }
 
@@ -47,11 +48,11 @@ pub fn validator_verify_threat(
     // -------------------------
     // Verify Proof
     // -------------------------
-    let is_valid = Groth16::<Bn254>::verify(vk, &public_inputs, &proof)
-        .map_err(|e| ZKPError::VerificationError(e.to_string()))?;
+    let is_valid = Groth16::<Bn254>::verify_proof(vk, &proof, &public_inputs)
+        .map_err(|_e| ZKPError::Verification)?;
 
     if !is_valid {
-        log::warn!("Invalid proof detected");
+        tracing::warn!("Invalid proof detected");
         return Ok(false);
     }
 
@@ -67,10 +68,6 @@ pub fn validator_verify_threat(
         "benign".to_string()
     };
 
-    let threat_score_int = threat_score_field.into_bigint().to_bytes_le();
-    let threat_score_value =
-        Fr::from_le_bytes_mod_order(&threat_score_int).into_bigint().to_bytes_le();
-
     let threat_score_numeric = threat_score_field
         .into_bigint()
         .to_bytes_le()
@@ -83,11 +80,11 @@ pub fn validator_verify_threat(
     // Policy-Level Validation
     // -------------------------
     if classification == "malicious" && threat_score_numeric < 0.7 {
-        log::warn!("Malicious classification but score below policy threshold");
+        tracing::warn!("Malicious classification but score below policy threshold");
         return Ok(false);
     }
 
-    log::info!(
+    tracing::info!(
         "✅ Proof verified: {} with score {:.2}",
         classification,
         threat_score_numeric
