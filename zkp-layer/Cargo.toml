@@ -32,7 +32,7 @@ ark-serialize = { version = "0.4", default-features = false }
 ark-relations = { version = "0.4", default-features = false }
 ark-r1cs-std = { version = "0.4", default-features = false }
 ark-groth16 = { version = "0.4", default-features = false }
-ark-bn254 = { version = "0.4", default-features = false }
+ark-bn254 = { version = "0.4", default-features = false, features = ["curve"] }
 ark-crypto-primitives = { version = "0.4", default-features = false }
 
 # ----------------------------
