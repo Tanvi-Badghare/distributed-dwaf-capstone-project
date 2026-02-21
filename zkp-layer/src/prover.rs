@@ -4,7 +4,7 @@ use ark_bn254::{Bn254, Fr};
 use ark_groth16::{Groth16, ProvingKey};
 use ark_serialize::{CanonicalSerialize, CanonicalDeserialize};
 use ark_std::{rand::rngs::StdRng, rand::SeedableRng, Zero};
-use ark_snark::SNARK;
+use ark_crypto_primitives::snark::SNARK;
 use std::fs::File;
 use std::path::Path;
 
@@ -136,7 +136,7 @@ pub fn generate_proof(
     );
 
     let proof = Groth16::<Bn254>::prove(proving_key, circuit, &mut rng)
-        .map_err(|_e| ZKPError::ProofGeneration)?;
+        .map_err(|_| ZKPError::ProofGeneration)?;
 
     let mut proof_bytes = Vec::new();
     proof.serialize_compressed(&mut proof_bytes)
