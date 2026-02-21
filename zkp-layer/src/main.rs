@@ -1,6 +1,6 @@
 //! ZKP-WAF API Server
 //! REST interface for Groth16 proof generation & verification
-
+#![allow(dead_code)]
 use actix_web::{
     middleware,
     web, App, HttpResponse, HttpServer, Result as ActixResult,
@@ -263,8 +263,19 @@ async fn main() -> std::io::Result<()> {
 
     tracing::info!("Starting ZKP-WAF API...");
 
-    // TODO: Replace with your actual Poseidon parameters
-    let poseidon_config = PoseidonConfig::<Fr>::default();
+    // Poseidon parameters for BN254 scalar field
+    // alpha=17, full rounds=8, partial rounds=31 — standard for BN254
+    let poseidon_config = {
+        use ark_crypto_primitives::sponge::poseidon::find_poseidon_ark_and_mds;
+        let (ark, mds) = find_poseidon_ark_and_mds::<Fr>(
+            255, // prime bit size for BN254 Fr
+            2,   // rate
+            8,   // full rounds
+            31,  // partial rounds
+            0,   // skip matrices
+        );
+        PoseidonConfig::<Fr>::new(8, 31, 17, mds, ark, 2, 1)
+    };
 
     let app_state = web::Data::new(AppState {
         proving_key: Arc::new(RwLock::new(None)),
