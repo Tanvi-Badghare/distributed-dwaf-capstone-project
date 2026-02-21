@@ -6,10 +6,9 @@ use actix_web::{
     web, App, HttpResponse, HttpServer, Result as ActixResult,
 };
 use ark_bn254::{Bn254, Fr};
-use ark_groth16::{ProvingKey, VerifyingKey};
-use ark_sponge::poseidon::PoseidonConfig;
+use ark_groth16::{PreparedVerifyingKey, ProvingKey};
+use ark_crypto_primitives::sponge::poseidon::PoseidonConfig;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
-use log::{error, info};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, RwLock};
 use std::time::{Instant, SystemTime};
@@ -20,8 +19,7 @@ mod prover;
 mod utils;
 mod verifier;
 
-use crate::errors::ZKPError;
-use crate::prover::{generate_proof};
+use crate::prover::generate_proof;
 use crate::verifier::validator_verify_threat;
 
 // ============================================================================
@@ -31,7 +29,7 @@ use crate::verifier::validator_verify_threat;
 #[derive(Clone)]
 struct AppState {
     proving_key: Arc<RwLock<Option<ProvingKey<Bn254>>>>,
-    verification_key: Arc<RwLock<Option<VerifyingKey<Bn254>>>>,
+    verification_key: Arc<RwLock<Option<PreparedVerifyingKey<Bn254>>>>,
     poseidon_config: PoseidonConfig<Fr>,
     start_time: SystemTime,
 }
@@ -144,10 +142,8 @@ async fn generate_proof_endpoint(
         Ok(proof_data) => {
             let elapsed = start.elapsed().as_millis();
 
-            // Encode proof
             let proof_base64 = BASE64.encode(&proof_data.proof_bytes);
 
-            // Encode public inputs
             let public_inputs_encoded: Vec<String> = proof_data
                 .public_inputs
                 .iter()
@@ -163,7 +159,7 @@ async fn generate_proof_endpoint(
             }))
         }
         Err(e) => {
-            error!("Proof generation failed: {}", e);
+            tracing::error!("Proof generation failed: {}", e);
             Ok(HttpResponse::InternalServerError().json(
                 GenerateProofResponse {
                     success: false,
@@ -236,7 +232,6 @@ async fn verify_proof_endpoint(
     match validator_verify_threat(&proof_bytes, &public_inputs_bytes, vk) {
         Ok(is_valid) => {
             let elapsed = start.elapsed().as_millis();
-
             Ok(HttpResponse::Ok().json(VerifyProofResponse {
                 success: true,
                 is_valid,
@@ -245,7 +240,7 @@ async fn verify_proof_endpoint(
             }))
         }
         Err(e) => {
-            error!("Verification failed: {}", e);
+            tracing::error!("Verification failed: {}", e);
             Ok(HttpResponse::InternalServerError().json(
                 VerifyProofResponse {
                     success: false,
@@ -264,9 +259,9 @@ async fn verify_proof_endpoint(
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    env_logger::init();
+    tracing_subscriber::fmt::init();
 
-    info!("Starting ZKP-WAF API...");
+    tracing::info!("Starting ZKP-WAF API...");
 
     // TODO: Replace with your actual Poseidon parameters
     let poseidon_config = PoseidonConfig::<Fr>::default();
