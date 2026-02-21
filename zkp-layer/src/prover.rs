@@ -1,19 +1,15 @@
 //! Production-grade Proof Generation Module
 
 use ark_bn254::{Bn254, Fr};
-use ark_groth16::{Groth16, ProvingKey, Proof};
+use ark_groth16::{Groth16, ProvingKey};
 use ark_serialize::{CanonicalSerialize, CanonicalDeserialize};
-use ark_std::rand::{rngs::OsRng, RngCore};
-use ark_relations::r1cs::ConstraintSynthesizer;
-use ark_sponge::{
-    poseidon::{PoseidonConfig, PoseidonSponge},
-    CryptographicSponge,
-};
+use ark_std::{rand::rngs::StdRng, rand::SeedableRng, Zero};
+use ark_snark::SNARK;
 use std::fs::File;
 use std::path::Path;
 
 use crate::circuits::MLInferenceCircuit;
-use crate::utils::{floats_to_fields, validate_features, validate_weights};
+use crate::utils::{floats_to_fields, validate_features, validate_weights, compute_commitment};
 use crate::errors::{ZKPError, Result};
 
 /// Proof container for transport
@@ -25,9 +21,9 @@ pub struct ProofData {
 
 /// Setup Groth16 proving key
 pub fn setup_prover(
-    poseidon_config: PoseidonConfig<Fr>,
+    poseidon_config: ark_crypto_primitives::sponge::poseidon::PoseidonConfig<Fr>,
 ) -> Result<ProvingKey<Bn254>> {
-    log::info!("Generating proving key...");
+    tracing::info!("Generating proving key...");
 
     // Blank circuit with no witnesses
     let circuit = MLInferenceCircuit {
@@ -37,18 +33,18 @@ pub fn setup_prover(
         model_hash: Some(Fr::zero()),
         classification_result: Some(Fr::zero()),
         threat_score: Some(Fr::zero()),
-        poseidon_config,
+        poseidon_config: poseidon_config.clone(),
     };
 
-    let mut rng = OsRng;
+    let mut rng = StdRng::seed_from_u64(0u64);
 
     let params = Groth16::<Bn254>::generate_random_parameters_with_reduction(
         circuit,
         &mut rng,
     )
-    .map_err(|e| ZKPError::SetupError(e.to_string()))?;
+    .map_err(|e| ZKPError::Setup(e.to_string()))?;
 
-    log::info!("✅ Proving key generated");
+    tracing::info!("Proving key generated");
     Ok(params)
 }
 
@@ -56,7 +52,7 @@ pub fn setup_prover(
 pub fn save_proving_key(pk: &ProvingKey<Bn254>, path: &Path) -> Result<()> {
     let mut file = File::create(path)?;
     pk.serialize_compressed(&mut file)
-        .map_err(|e| ZKPError::SerializationError(e.to_string()))?;
+        .map_err(|e| ZKPError::Serialization(e.to_string()))?;
     Ok(())
 }
 
@@ -64,7 +60,7 @@ pub fn save_proving_key(pk: &ProvingKey<Bn254>, path: &Path) -> Result<()> {
 pub fn load_proving_key(path: &Path) -> Result<ProvingKey<Bn254>> {
     let mut file = File::open(path)?;
     ProvingKey::<Bn254>::deserialize_compressed(&mut file)
-        .map_err(|e| ZKPError::SerializationError(e.to_string()))
+        .map_err(|e| ZKPError::Serialization(e.to_string()))
 }
 
 /// Generate ZK proof
@@ -74,9 +70,9 @@ pub fn generate_proof(
     classification: &str,
     threat_score: f64,
     proving_key: &ProvingKey<Bn254>,
-    poseidon_config: PoseidonConfig<Fr>,
+    poseidon_config: ark_crypto_primitives::sponge::poseidon::PoseidonConfig<Fr>,
 ) -> Result<ProofData> {
-    log::info!("Starting proof generation...");
+    tracing::info!("Starting proof generation...");
 
     validate_features(features)?;
     validate_weights(model_weights)?;
@@ -88,26 +84,18 @@ pub fn generate_proof(
     }
 
     // Convert inputs
-    let feature_fields = floats_to_fields(features);
-    let weight_fields = floats_to_fields(model_weights);
+    let feature_fields = floats_to_fields(features)?;
+    let weight_fields = floats_to_fields(model_weights)?;
 
     // -------------------------
-    // Poseidon Feature Commitment
+    // Feature Commitment
     // -------------------------
-    let mut sponge = PoseidonSponge::new(&poseidon_config);
-    for f in &feature_fields {
-        sponge.absorb(f);
-    }
-    let commitment = sponge.squeeze_field_elements(1)[0];
+    let commitment = compute_commitment(&feature_fields);
 
     // -------------------------
-    // Poseidon Model Hash
+    // Model Hash
     // -------------------------
-    let mut model_sponge = PoseidonSponge::new(&poseidon_config);
-    for w in &weight_fields {
-        model_sponge.absorb(w);
-    }
-    let model_hash = model_sponge.squeeze_field_elements(1)[0];
+    let model_hash = compute_commitment(&weight_fields);
 
     // -------------------------
     // Classification Mapping
@@ -140,14 +128,19 @@ pub fn generate_proof(
     // -------------------------
     // Generate Proof
     // -------------------------
-    let mut rng = OsRng;
+    let mut rng = StdRng::seed_from_u64(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .subsec_nanos() as u64,
+    );
 
     let proof = Groth16::<Bn254>::prove(proving_key, circuit, &mut rng)
-        .map_err(|e| ZKPError::ProofGenerationError(e.to_string()))?;
+        .map_err(|_e| ZKPError::ProofGeneration)?;
 
     let mut proof_bytes = Vec::new();
     proof.serialize_compressed(&mut proof_bytes)
-        .map_err(|e| ZKPError::SerializationError(e.to_string()))?;
+        .map_err(|e| ZKPError::Serialization(e.to_string()))?;
 
     // Public inputs must match circuit order
     let public_fields = vec![
@@ -161,11 +154,11 @@ pub fn generate_proof(
     for field in public_fields {
         let mut bytes = Vec::new();
         field.serialize_compressed(&mut bytes)
-            .map_err(|e| ZKPError::SerializationError(e.to_string()))?;
+            .map_err(|e| ZKPError::Serialization(e.to_string()))?;
         public_inputs.push(bytes);
     }
 
-    log::info!("✅ Proof generated ({} bytes)", proof_bytes.len());
+    tracing::info!("Proof generated ({} bytes)", proof_bytes.len());
 
     Ok(ProofData {
         proof_bytes,
