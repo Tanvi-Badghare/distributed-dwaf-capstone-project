@@ -7,24 +7,24 @@
 //! - Integer semantics preserved (no unsafe field division)
 
 use ark_bn254::Fr;
-use ark_ff::Field;
+use ark_ff::Zero;
 use ark_r1cs_std::{
     alloc::AllocVar,
     boolean::Boolean,
     eq::EqGadget,
     fields::fp::FpVar,
     select::CondSelectGadget,
-    R1CSVar,
+    ToBitsGadget,
 };
 use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError};
-use ark_sponge::{
-    poseidon::{PoseidonConfig, PoseidonSponge},
-    CryptographicSponge,
+use ark_crypto_primitives::sponge::{
+    poseidon::PoseidonConfig,
+    constraints::CryptographicSpongeVar,
 };
+use ark_crypto_primitives::sponge::poseidon::constraints::PoseidonSpongeVar;
 
 const NUM_FEATURES: usize = 41;
 const NUM_WEIGHTS: usize = 12;
-const NUM_TREES: u64 = 3;
 
 pub struct MLInferenceCircuit {
     // Private
@@ -48,14 +48,14 @@ impl ConstraintSynthesizer<Fr> for MLInferenceCircuit {
         // =========================
         let feature_vars: Vec<FpVar<Fr>> = self
             .features
-            .unwrap()
+            .unwrap_or_else(|| vec![Fr::zero(); NUM_FEATURES])
             .into_iter()
             .map(|f| FpVar::new_witness(cs.clone(), || Ok(f)))
             .collect::<Result<_, _>>()?;
 
         let weight_vars: Vec<FpVar<Fr>> = self
             .model_weights
-            .unwrap()
+            .unwrap_or_else(|| vec![Fr::zero(); NUM_WEIGHTS])
             .into_iter()
             .map(|w| FpVar::new_witness(cs.clone(), || Ok(w)))
             .collect::<Result<_, _>>()?;
@@ -64,16 +64,16 @@ impl ConstraintSynthesizer<Fr> for MLInferenceCircuit {
         // Allocate Public Inputs
         // =========================
         let commitment_var =
-            FpVar::new_input(cs.clone(), || Ok(self.feature_commitment.unwrap()))?;
+            FpVar::new_input(cs.clone(), || Ok(self.feature_commitment.unwrap_or(Fr::zero())))?;
 
         let model_hash_var =
-            FpVar::new_input(cs.clone(), || Ok(self.model_hash.unwrap()))?;
+            FpVar::new_input(cs.clone(), || Ok(self.model_hash.unwrap_or(Fr::zero())))?;
 
         let classification_var =
-            FpVar::new_input(cs.clone(), || Ok(self.classification_result.unwrap()))?;
+            FpVar::new_input(cs.clone(), || Ok(self.classification_result.unwrap_or(Fr::zero())))?;
 
         let threat_score_var =
-            FpVar::new_input(cs.clone(), || Ok(self.threat_score.unwrap()))?;
+            FpVar::new_input(cs.clone(), || Ok(self.threat_score.unwrap_or(Fr::zero())))?;
 
         // =========================
         // Range Constraints
@@ -93,9 +93,9 @@ impl ConstraintSynthesizer<Fr> for MLInferenceCircuit {
         }
 
         // =========================
-        // Feature Commitment (Poseidon)
+        // Feature Commitment (Poseidon in-circuit)
         // =========================
-        let mut sponge = PoseidonSponge::new(&self.poseidon_config);
+        let mut sponge = PoseidonSpongeVar::new(cs.clone(), &self.poseidon_config);
 
         for feature in &feature_vars {
             sponge.absorb(feature)?;
@@ -105,9 +105,9 @@ impl ConstraintSynthesizer<Fr> for MLInferenceCircuit {
         computed_commitment.enforce_equal(&commitment_var)?;
 
         // =========================
-        // Model Hash Binding
+        // Model Hash Binding (Poseidon in-circuit)
         // =========================
-        let mut model_sponge = PoseidonSponge::new(&self.poseidon_config);
+        let mut model_sponge = PoseidonSpongeVar::new(cs.clone(), &self.poseidon_config);
 
         for weight in &weight_vars {
             model_sponge.absorb(weight)?;
@@ -119,15 +119,12 @@ impl ConstraintSynthesizer<Fr> for MLInferenceCircuit {
         // =========================
         // Tree Evaluation
         // =========================
-
         let mut votes = Vec::new();
 
         for tree in 0..3 {
             let base = tree * 4;
-
             let f = &feature_vars[tree];
             let threshold = &weight_vars[base];
-
             let is_malicious = f.is_cmp(threshold, std::cmp::Ordering::Greater, false)?;
             votes.push(is_malicious);
         }
@@ -135,14 +132,14 @@ impl ConstraintSynthesizer<Fr> for MLInferenceCircuit {
         // =========================
         // Vote Sum
         // =========================
-        let mut vote_sum = FpVar::<Fr>::constant(Fr::zero());
+        let mut vote_sum = FpVar::<Fr>::Constant(Fr::zero());
 
         for vote in &votes {
             let vote_fp = FpVar::from(vote.clone());
             vote_sum += vote_fp;
         }
 
-        // Enforce vote_sum < 4 (2 bits)
+        // Enforce vote_sum < 4 (2 bits sufficient)
         let vote_bits = vote_sum.to_bits_le()?;
         for bit in vote_bits.iter().skip(2) {
             bit.enforce_equal(&Boolean::constant(false))?;
@@ -151,32 +148,29 @@ impl ConstraintSynthesizer<Fr> for MLInferenceCircuit {
         // =========================
         // Majority Classification
         // =========================
-        let two = FpVar::constant(Fr::from(2u64));
+        let two = FpVar::Constant(Fr::from(2u64));
         let is_majority = vote_sum.is_cmp(&two, std::cmp::Ordering::Greater, true)?;
 
-        let computed_classification =
-            FpVar::conditionally_select(&is_majority, &Fr::from(1u64).into(), &Fr::zero().into())?;
+        let one_fp   = FpVar::Constant(Fr::from(1u64));
+        let zero_fp  = FpVar::Constant(Fr::zero());
 
+        let computed_classification =
+            FpVar::conditionally_select(&is_majority, &one_fp, &zero_fp)?;
         computed_classification.enforce_equal(&classification_var)?;
 
         // =========================
         // Threat Score Mapping (Integer Safe)
         // =========================
-        let zero = FpVar::constant(Fr::zero());
-        let thirty_three = FpVar::constant(Fr::from(33u64));
-        let sixty_six = FpVar::constant(Fr::from(66u64));
-        let hundred = FpVar::constant(Fr::from(100u64));
+        let thirty_three = FpVar::Constant(Fr::from(33u64));
+        let sixty_six    = FpVar::Constant(Fr::from(66u64));
+        let hundred      = FpVar::Constant(Fr::from(100u64));
 
-        let is_zero = vote_sum.is_eq(&zero)?;
-        let is_one = vote_sum.is_eq(&Fr::from(1u64).into())?;
-        let is_two = vote_sum.is_eq(&Fr::from(2u64).into())?;
-
-        let score_1 = FpVar::conditionally_select(&is_zero, &zero, &thirty_three)?;
-        let score_2 = FpVar::conditionally_select(&is_one, &thirty_three, &sixty_six)?;
-        let score_3 = FpVar::conditionally_select(&is_two, &sixty_six, &hundred)?;
+        let is_zero = vote_sum.is_eq(&zero_fp)?;
+        let is_one  = vote_sum.is_eq(&FpVar::Constant(Fr::from(1u64)))?;
+        let is_two  = vote_sum.is_eq(&FpVar::Constant(Fr::from(2u64)))?;
 
         let computed_score =
-            FpVar::conditionally_select(&is_zero, &zero,
+            FpVar::conditionally_select(&is_zero, &zero_fp,
             &FpVar::conditionally_select(&is_one, &thirty_three,
             &FpVar::conditionally_select(&is_two, &sixty_six, &hundred)?)?)?;
 
