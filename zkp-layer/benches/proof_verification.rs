@@ -2,7 +2,6 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use ark_bn254::Fr;
 use ark_crypto_primitives::sponge::poseidon::{PoseidonConfig, find_poseidon_ark_and_mds};
 use ark_groth16::prepare_verifying_key;
-use ark_serialize::CanonicalDeserialize;
 use zkp_waf::prover::{setup_prover, generate_proof};
 use zkp_waf::verifier::validator_verify_threat;
 
