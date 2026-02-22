@@ -1,6 +1,6 @@
 //! ZKP-WAF API Server
 //! REST interface for Groth16 proof generation & verification
-#![allow(dead_code)]
+
 use actix_web::{
     middleware,
     web, App, HttpResponse, HttpServer, Result as ActixResult,
@@ -268,7 +268,7 @@ async fn main() -> std::io::Result<()> {
     let poseidon_config = {
         use ark_crypto_primitives::sponge::poseidon::find_poseidon_ark_and_mds;
         let (ark, mds) = find_poseidon_ark_and_mds::<Fr>(
-            255, // prime bit size for BN254 Fr
+            254, // prime bit size for BN254 Fr
             2,   // rate
             8,   // full rounds
             31,  // partial rounds

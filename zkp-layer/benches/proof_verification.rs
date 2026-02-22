@@ -6,7 +6,7 @@ use zkp_waf::prover::{setup_prover, generate_proof};
 use zkp_waf::verifier::validator_verify_threat;
 
 fn make_poseidon() -> PoseidonConfig<Fr> {
-    let (ark, mds) = find_poseidon_ark_and_mds::<Fr>(255, 2, 8, 31, 0);
+    let (ark, mds) = find_poseidon_ark_and_mds::<Fr>(254, 2, 8, 31, 0);
     PoseidonConfig::<Fr>::new(8, 31, 17, mds, ark, 2, 1)
 }
 
