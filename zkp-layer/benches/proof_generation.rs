@@ -1,25 +1,31 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use zkp_layer::{generate_proof, setup_prover};
 use ark_bn254::Fr;
-use ark_sponge::poseidon::PoseidonConfig;
+use ark_crypto_primitives::sponge::poseidon::{PoseidonConfig, find_poseidon_ark_and_mds};
+use zkp_waf::prover::{setup_prover, generate_proof};
+
+fn make_poseidon() -> PoseidonConfig<Fr> {
+    let (ark, mds) = find_poseidon_ark_and_mds::<Fr>(255, 2, 8, 31, 0);
+    PoseidonConfig::<Fr>::new(8, 31, 17, mds, ark, 2, 1)
+}
 
 fn bench_proof_generation(c: &mut Criterion) {
-    let poseidon = PoseidonConfig::<Fr>::default();
-    let pk = setup_prover(&poseidon).unwrap();
+    let poseidon = make_poseidon();
+    let pk = setup_prover(poseidon.clone()).expect("setup failed");
+
+    let features: Vec<f64> = vec![0.5; 41];
+    let weights: Vec<f64> = vec![0.3; 12];
 
     c.bench_function("proof_generation", |b| {
         b.iter(|| {
-            let features = vec![Fr::from(1u64); 41];
-            let weights = vec![Fr::from(2u64); 12];
-
             generate_proof(
-                &pk,
-                &poseidon,
-                features,
-                weights,
-                true,
+                &features,
+                &weights,
+                "malicious",
                 0.85,
-            ).unwrap();
+                &pk,
+                poseidon.clone(),
+            )
+            .expect("proof generation failed");
         });
     });
 }

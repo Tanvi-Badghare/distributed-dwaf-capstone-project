@@ -1,55 +1,45 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use zkp_layer::circuits::ml_inference_circuit::MlInferenceCircuit;
-use zkp_layer::prover::generate_proof;
-use zkp_layer::verifier::verify_proof;
+use ark_bn254::Fr;
+use ark_crypto_primitives::sponge::poseidon::{PoseidonConfig, find_poseidon_ark_and_mds};
+use ark_groth16::prepare_verifying_key;
+use ark_serialize::CanonicalDeserialize;
+use zkp_waf::prover::{setup_prover, generate_proof};
+use zkp_waf::verifier::validator_verify_threat;
 
-use ark_bls12_381::Bls12_381;
-use ark_groth16::{generate_random_parameters, prepare_verifying_key};
-use ark_relations::r1cs::ConstraintSynthesizer;
-use ark_std::test_rng;
+fn make_poseidon() -> PoseidonConfig<Fr> {
+    let (ark, mds) = find_poseidon_ark_and_mds::<Fr>(255, 2, 8, 31, 0);
+    PoseidonConfig::<Fr>::new(8, 31, 17, mds, ark, 2, 1)
+}
 
-/// Benchmarks ONLY proof verification time.
-/// Proof generation is done once before benchmarking.
-fn benchmark_proof_verification(c: &mut Criterion) {
-    // RNG
-    let mut rng = test_rng();
+fn bench_proof_verification(c: &mut Criterion) {
+    let poseidon = make_poseidon();
+    let pk = setup_prover(poseidon.clone()).expect("setup failed");
+    let pvk = prepare_verifying_key(&pk.vk);
 
-    // ---- Dummy Test Data ----
-    let features = vec![1u64, 0u64, 1u64, 0u64];
-    let classification = 1u64;
+    let features: Vec<f64> = vec![0.5; 41];
+    let weights: Vec<f64> = vec![0.3; 12];
 
-    // ---- Build Circuit Instance ----
-    let circuit = MlInferenceCircuit {
-        features: features.clone(),
-        classification,
-    };
+    let proof_data = generate_proof(
+        &features,
+        &weights,
+        "malicious",
+        0.85,
+        &pk,
+        poseidon.clone(),
+    )
+    .expect("proof generation failed");
 
-    // ---- Setup (trusted setup simulation) ----
-    let params =
-        generate_random_parameters::<Bls12_381, _, _>(circuit.clone(), &mut rng)
-            .expect("failed to generate parameters");
-
-    let pvk = prepare_verifying_key(&params.vk);
-
-    // ---- Generate Proof Once ----
-    let proof =
-        generate_proof(circuit, &params, &mut rng)
-            .expect("proof generation failed");
-
-    // ---- Public Inputs ----
-    let public_inputs = vec![classification.into()];
-
-    // ---- Benchmark Verification ----
     c.bench_function("proof_verification", |b| {
         b.iter(|| {
-            let result =
-                verify_proof(&pvk, &proof, &public_inputs)
-                    .expect("verification failed");
-
-            assert!(result);
-        })
+            validator_verify_threat(
+                &proof_data.proof_bytes,
+                &proof_data.public_inputs,
+                &pvk,
+            )
+            .expect("verification failed");
+        });
     });
 }
 
-criterion_group!(benches, benchmark_proof_verification);
+criterion_group!(benches, bench_proof_verification);
 criterion_main!(benches);
