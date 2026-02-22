@@ -1,6 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use ark_bn254::Fr;
-use ark_crypto_primitives::sponge::poseidon::{PoseidonConfig, find_poseidon_ark_and_mds};
 use zkp_waf::utils::compute_commitment;
 
 fn bench_commitment(c: &mut Criterion) {
