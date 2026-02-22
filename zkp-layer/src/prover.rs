@@ -18,7 +18,7 @@ pub struct ProofData {
     pub proof_bytes: Vec<u8>,
     pub public_inputs: Vec<Vec<u8>>, // Canonical serialized field elements
 }
-
+#[allow(dead_code)]
 /// Setup Groth16 proving key
 pub fn setup_prover(
     poseidon_config: ark_crypto_primitives::sponge::poseidon::PoseidonConfig<Fr>,
@@ -48,6 +48,7 @@ pub fn setup_prover(
     Ok(params)
 }
 
+#[allow(dead_code)]
 /// Save proving key
 pub fn save_proving_key(pk: &ProvingKey<Bn254>, path: &Path) -> Result<()> {
     let mut file = File::create(path)?;
@@ -56,6 +57,7 @@ pub fn save_proving_key(pk: &ProvingKey<Bn254>, path: &Path) -> Result<()> {
     Ok(())
 }
 
+#[allow(dead_code)]
 /// Load proving key
 pub fn load_proving_key(path: &Path) -> Result<ProvingKey<Bn254>> {
     let mut file = File::open(path)?;
@@ -63,6 +65,7 @@ pub fn load_proving_key(path: &Path) -> Result<ProvingKey<Bn254>> {
         .map_err(|e| ZKPError::Serialization(e.to_string()))
 }
 
+#[allow(dead_code)]
 /// Generate ZK proof
 pub fn generate_proof(
     features: &[f64],

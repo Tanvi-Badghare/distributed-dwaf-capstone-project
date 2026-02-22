@@ -7,6 +7,7 @@ use ark_ff::{PrimeField, BigInteger};
 
 use crate::errors::{ZKPError, Result};
 
+#[allow(dead_code)]
 /// Verification result returned to validator logic
 pub struct VerificationResult {
     pub is_valid: bool,

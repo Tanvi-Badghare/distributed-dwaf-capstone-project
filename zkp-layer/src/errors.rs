@@ -9,6 +9,7 @@ use thiserror::Error;
 /// - Input validation errors
 /// - System/IO failures
 /// - Setup/configuration issues
+#[allow(dead_code)]
 #[derive(Error, Debug)]
 pub enum ZKPError {
     // =============================

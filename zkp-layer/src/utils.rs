@@ -47,6 +47,7 @@ pub fn float_to_field(value: f64) -> Result<Fr> {
     })
 }
 
+#[allow(dead_code)]
 /// Convert a field element back to float (for debugging only).
 ///
 /// ⚠️ Not safe for cryptographic canonical decoding.
