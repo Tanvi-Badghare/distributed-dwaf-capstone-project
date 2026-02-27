@@ -1,4 +1,5 @@
 # Distributed Web Application Firewall (DWAF)
+This is a research-only defensive system demonstrating distributed anomaly detection, ZKP verification, and consensus-based threat validation. All vulnerable apps are intentionally sandboxed and isolated for academic experimentation.
 
 ## Overview
 - The Distributed Web Application Firewall (DWAF) is a federated security architecture that combines machine learning–based anomaly detection, zero-knowledge cryptographic attestation (Groth16), distributed validator voting, and STIX/TAXII–based threat intelligence sharing.
