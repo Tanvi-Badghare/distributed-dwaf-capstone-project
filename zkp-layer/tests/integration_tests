@@ -1,0 +1,252 @@
+//! Integration tests for the ZKP-WAF layer
+//! Tests the full prove → verify round trip
+
+#[cfg(test)]
+mod integration_tests {
+    use ark_bn254::Fr;
+    use ark_crypto_primitives::sponge::poseidon::{
+        PoseidonConfig, find_poseidon_ark_and_mds,
+    };
+    use ark_groth16::prepare_verifying_key;
+
+    use zkp_waf::prover::{setup_prover, generate_proof};
+    use zkp_waf::verifier::validator_verify_threat;
+
+    // ── Poseidon config helper ────────────────────────────────────────────────
+
+    fn make_poseidon() -> PoseidonConfig<Fr> {
+        let (ark, mds) = find_poseidon_ark_and_mds::<Fr>(254, 2, 8, 31, 0);
+        PoseidonConfig::<Fr>::new(8, 31, 17, mds, ark, 2, 1)
+    }
+
+    fn make_features() -> Vec<f64> {
+        vec![0.5; 41]
+    }
+
+    fn make_weights() -> Vec<f64> {
+        vec![0.3; 12]
+    }
+
+    // ── Setup ────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_setup_prover_succeeds() {
+        let poseidon = make_poseidon();
+        let pk = setup_prover(poseidon);
+        assert!(pk.is_ok(), "setup_prover should succeed");
+    }
+
+    // ── Proof generation ─────────────────────────────────────────────────────
+
+    #[test]
+    fn test_generate_proof_malicious() {
+        let poseidon = make_poseidon();
+        let pk = setup_prover(poseidon.clone()).expect("setup failed");
+
+        let result = generate_proof(
+            &make_features(),
+            &make_weights(),
+            "malicious",
+            0.85,
+            &pk,
+            poseidon,
+        );
+        assert!(result.is_ok(), "proof generation should succeed for malicious");
+        let proof_data = result.unwrap();
+        assert!(!proof_data.proof_bytes.is_empty(), "proof bytes should not be empty");
+        assert_eq!(proof_data.public_inputs.len(), 4, "should have 4 public inputs");
+    }
+
+    #[test]
+    fn test_generate_proof_benign() {
+        let poseidon = make_poseidon();
+        let pk = setup_prover(poseidon.clone()).expect("setup failed");
+
+        let result = generate_proof(
+            &make_features(),
+            &make_weights(),
+            "benign",
+            0.10,
+            &pk,
+            poseidon,
+        );
+        assert!(result.is_ok(), "proof generation should succeed for benign");
+    }
+
+    #[test]
+    fn test_generate_proof_invalid_classification() {
+        let poseidon = make_poseidon();
+        let pk = setup_prover(poseidon.clone()).expect("setup failed");
+
+        let result = generate_proof(
+            &make_features(),
+            &make_weights(),
+            "unknown",
+            0.5,
+            &pk,
+            poseidon,
+        );
+        assert!(result.is_err(), "invalid classification should return error");
+    }
+
+    #[test]
+    fn test_generate_proof_invalid_threat_score() {
+        let poseidon = make_poseidon();
+        let pk = setup_prover(poseidon.clone()).expect("setup failed");
+
+        let result = generate_proof(
+            &make_features(),
+            &make_weights(),
+            "malicious",
+            1.5,  // out of range
+            &pk,
+            poseidon,
+        );
+        assert!(result.is_err(), "threat score > 1.0 should return error");
+    }
+
+    // ── Full round trip ───────────────────────────────────────────────────────
+
+    #[test]
+    fn test_full_round_trip_malicious() {
+        let poseidon = make_poseidon();
+        let pk = setup_prover(poseidon.clone()).expect("setup failed");
+        let pvk = prepare_verifying_key(&pk.vk);
+
+        let proof_data = generate_proof(
+            &make_features(),
+            &make_weights(),
+            "malicious",
+            0.85,
+            &pk,
+            poseidon,
+        ).expect("proof generation failed");
+
+        let is_valid = validator_verify_threat(
+            &proof_data.proof_bytes,
+            &proof_data.public_inputs,
+            &pvk,
+        ).expect("verification failed");
+
+        assert!(is_valid, "valid proof should verify as true");
+    }
+
+    #[test]
+    fn test_full_round_trip_benign() {
+        let poseidon = make_poseidon();
+        let pk = setup_prover(poseidon.clone()).expect("setup failed");
+        let pvk = prepare_verifying_key(&pk.vk);
+
+        let proof_data = generate_proof(
+            &make_features(),
+            &make_weights(),
+            "benign",
+            0.10,
+            &pk,
+            poseidon,
+        ).expect("proof generation failed");
+
+        let is_valid = validator_verify_threat(
+            &proof_data.proof_bytes,
+            &proof_data.public_inputs,
+            &pvk,
+        ).expect("verification failed");
+
+        assert!(is_valid, "valid benign proof should verify as true");
+    }
+
+    #[test]
+    fn test_tampered_proof_fails_verification() {
+        let poseidon = make_poseidon();
+        let pk = setup_prover(poseidon.clone()).expect("setup failed");
+        let pvk = prepare_verifying_key(&pk.vk);
+
+        let mut proof_data = generate_proof(
+            &make_features(),
+            &make_weights(),
+            "malicious",
+            0.85,
+            &pk,
+            poseidon,
+        ).expect("proof generation failed");
+
+        // Tamper with proof bytes
+        if let Some(byte) = proof_data.proof_bytes.get_mut(0) {
+            *byte = byte.wrapping_add(1);
+        }
+
+        let result = validator_verify_threat(
+            &proof_data.proof_bytes,
+            &proof_data.public_inputs,
+            &pvk,
+        );
+
+        // Should either error or return false — never true
+        match result {
+            Ok(valid) => assert!(!valid, "tampered proof must not verify as true"),
+            Err(_)    => {} // deserialization error is also acceptable
+        }
+    }
+
+    #[test]
+    fn test_tampered_public_inputs_fails_verification() {
+        let poseidon = make_poseidon();
+        let pk = setup_prover(poseidon.clone()).expect("setup failed");
+        let pvk = prepare_verifying_key(&pk.vk);
+
+        let mut proof_data = generate_proof(
+            &make_features(),
+            &make_weights(),
+            "malicious",
+            0.85,
+            &pk,
+            poseidon,
+        ).expect("proof generation failed");
+
+        // Tamper with first public input
+        if let Some(input) = proof_data.public_inputs.get_mut(0) {
+            if let Some(byte) = input.get_mut(0) {
+                *byte = byte.wrapping_add(1);
+            }
+        }
+
+        let result = validator_verify_threat(
+            &proof_data.proof_bytes,
+            &proof_data.public_inputs,
+            &pvk,
+        );
+
+        match result {
+            Ok(valid) => assert!(!valid, "tampered inputs must not verify as true"),
+            Err(_)    => {}
+        }
+    }
+
+    // ── Public input count validation ─────────────────────────────────────────
+
+    #[test]
+    fn test_wrong_public_input_count_fails() {
+        let poseidon = make_poseidon();
+        let pk = setup_prover(poseidon.clone()).expect("setup failed");
+        let pvk = prepare_verifying_key(&pk.vk);
+
+        let proof_data = generate_proof(
+            &make_features(),
+            &make_weights(),
+            "malicious",
+            0.85,
+            &pk,
+            poseidon,
+        ).expect("proof generation failed");
+
+        // Pass only 2 instead of 4 public inputs
+        let truncated = proof_data.public_inputs[..2].to_vec();
+
+        let result = validator_verify_threat(
+            &proof_data.proof_bytes,
+            &truncated,
+            &pvk,
+        );
+        assert!(result.is_err(), "wrong input count should return error");
+    }
+}

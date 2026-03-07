@@ -1,0 +1,206 @@
+//! Circuit constraint tests for MLInferenceCircuit
+//! Tests the R1CS constraints are satisfied correctly
+
+#[cfg(test)]
+mod circuit_tests {
+    use ark_bn254::Fr;
+    use ark_ff::Zero;
+    use ark_crypto_primitives::sponge::poseidon::{
+        PoseidonConfig, find_poseidon_ark_and_mds,
+    };
+    use ark_relations::r1cs::ConstraintSystem;
+
+    use zkp_waf::circuits::MLInferenceCircuit;
+    use zkp_waf::utils::compute_commitment;
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    fn make_poseidon() -> PoseidonConfig<Fr> {
+        let (ark, mds) = find_poseidon_ark_and_mds::<Fr>(254, 2, 8, 31, 0);
+        PoseidonConfig::<Fr>::new(8, 31, 17, mds, ark, 2, 1)
+    }
+
+    fn make_features() -> Vec<Fr> {
+        (0..41).map(|i| Fr::from(i as u64 % 100)).collect()
+    }
+
+    fn make_weights() -> Vec<Fr> {
+        (0..12).map(|i| Fr::from(i as u64 % 100)).collect()
+    }
+
+    fn build_circuit(
+        features: Vec<Fr>,
+        weights: Vec<Fr>,
+        classification: Fr,
+        threat_score: Fr,
+        poseidon: PoseidonConfig<Fr>,
+    ) -> MLInferenceCircuit {
+        let commitment = compute_commitment(&features);
+        let model_hash = compute_commitment(&weights);
+
+        MLInferenceCircuit {
+            features:            Some(features),
+            model_weights:       Some(weights),
+            feature_commitment:  Some(commitment),
+            model_hash:          Some(model_hash),
+            classification_result: Some(classification),
+            threat_score:        Some(threat_score),
+            poseidon_config:     poseidon,
+        }
+    }
+
+    // ── Constraint satisfaction ───────────────────────────────────────────────
+
+    #[test]
+    fn test_circuit_satisfiable_benign() {
+        let poseidon  = make_poseidon();
+        let features  = make_features();
+        let weights   = make_weights();
+        let circuit   = build_circuit(
+            features, weights,
+            Fr::from(0u64),   // benign
+            Fr::from(0u64),   // score 0
+            poseidon,
+        );
+
+        let cs = ConstraintSystem::<Fr>::new_ref();
+        circuit.generate_constraints(cs.clone())
+            .expect("constraint generation should not fail");
+
+        assert!(
+            cs.is_satisfied().unwrap(),
+            "circuit should be satisfied for benign classification"
+        );
+    }
+
+    #[test]
+    fn test_circuit_satisfiable_malicious() {
+        let poseidon  = make_poseidon();
+        let features  = make_features();
+        let weights   = make_weights();
+        let circuit   = build_circuit(
+            features, weights,
+            Fr::from(1u64),    // malicious
+            Fr::from(85u64),   // score 85/100
+            poseidon,
+        );
+
+        let cs = ConstraintSystem::<Fr>::new_ref();
+        circuit.generate_constraints(cs.clone())
+            .expect("constraint generation should not fail");
+
+        assert!(
+            cs.is_satisfied().unwrap(),
+            "circuit should be satisfied for malicious classification"
+        );
+    }
+
+    #[test]
+    fn test_circuit_constraint_count_is_reasonable() {
+        let poseidon = make_poseidon();
+        let features = make_features();
+        let weights  = make_weights();
+        let circuit  = build_circuit(
+            features, weights,
+            Fr::from(0u64),
+            Fr::from(0u64),
+            poseidon,
+        );
+
+        let cs = ConstraintSystem::<Fr>::new_ref();
+        circuit.generate_constraints(cs.clone())
+            .expect("constraint generation failed");
+
+        let num_constraints = cs.num_constraints();
+        let num_variables   = cs.num_instance_variables()
+                            + cs.num_witness_variables();
+
+        println!("Constraints : {num_constraints}");
+        println!("Variables   : {num_variables}");
+
+        // Sanity bounds — not too small (under-constrained) or enormous
+        assert!(num_constraints > 100,
+            "circuit seems under-constrained: {num_constraints}");
+        assert!(num_constraints < 1_000_000,
+            "circuit is unreasonably large: {num_constraints}");
+    }
+
+    #[test]
+    fn test_circuit_wrong_commitment_unsatisfiable() {
+        let poseidon  = make_poseidon();
+        let features  = make_features();
+        let weights   = make_weights();
+        let real_hash = compute_commitment(&weights);
+
+        // Deliberately wrong feature commitment
+        let wrong_commitment = Fr::from(999999u64);
+
+        let circuit = MLInferenceCircuit {
+            features:              Some(features),
+            model_weights:         Some(weights),
+            feature_commitment:    Some(wrong_commitment), // ← wrong
+            model_hash:            Some(real_hash),
+            classification_result: Some(Fr::from(0u64)),
+            threat_score:          Some(Fr::from(0u64)),
+            poseidon_config:       poseidon,
+        };
+
+        let cs = ConstraintSystem::<Fr>::new_ref();
+        circuit.generate_constraints(cs.clone())
+            .expect("generation should not panic");
+
+        assert!(
+            !cs.is_satisfied().unwrap(),
+            "circuit should NOT be satisfied with wrong commitment"
+        );
+    }
+
+    #[test]
+    fn test_circuit_wrong_model_hash_unsatisfiable() {
+        let poseidon   = make_poseidon();
+        let features   = make_features();
+        let weights    = make_weights();
+        let commitment = compute_commitment(&features);
+
+        let circuit = MLInferenceCircuit {
+            features:              Some(features),
+            model_weights:         Some(weights),
+            feature_commitment:    Some(commitment),
+            model_hash:            Some(Fr::from(42u64)), // ← wrong
+            classification_result: Some(Fr::from(0u64)),
+            threat_score:          Some(Fr::from(0u64)),
+            poseidon_config:       poseidon,
+        };
+
+        let cs = ConstraintSystem::<Fr>::new_ref();
+        circuit.generate_constraints(cs.clone())
+            .expect("generation should not panic");
+
+        assert!(
+            !cs.is_satisfied().unwrap(),
+            "circuit should NOT be satisfied with wrong model hash"
+        );
+    }
+
+    // ── Empty / zero witnesses ────────────────────────────────────────────────
+
+    #[test]
+    fn test_circuit_zero_witnesses() {
+        let poseidon = make_poseidon();
+        let features = vec![Fr::zero(); 41];
+        let weights  = vec![Fr::zero(); 12];
+        let circuit  = build_circuit(
+            features, weights,
+            Fr::from(0u64),
+            Fr::from(0u64),
+            poseidon,
+        );
+
+        let cs = ConstraintSystem::<Fr>::new_ref();
+        circuit.generate_constraints(cs.clone())
+            .expect("zero witnesses should not panic");
+
+        // Just verify it doesn't crash — satisfiability may vary
+        let _ = cs.is_satisfied();
+    }
+}
