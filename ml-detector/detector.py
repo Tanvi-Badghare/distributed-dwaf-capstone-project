@@ -1,121 +1,75 @@
 """
-ML HTTP Detector
-Loads trained models and classifies HTTP requests using
-Random Forest + Isolation Forest ensemble.
+HTTP Detector — loads hybrid RF + TF-IDF models and classifies requests.
 """
 
 import joblib
 import numpy as np
-import pandas as pd
 from pathlib import Path
-from typing import Dict, List
+from scipy.sparse import hstack, csr_matrix
 
-from feature_extractor import extract_features_from_row
+from feature_extractor import extract_features_from_row, FEATURE_NAMES
 
+import pandas as pd
 
 MODELS_DIR = Path(__file__).parent / "models"
 
 
+def _build_payload_text(request: dict) -> str:
+    url  = str(request.get("url",     "") or "")
+    body = str(request.get("content", "") or "")
+    for sfx in [" HTTP/1.1", " HTTP/1.0", " HTTP/2"]:
+        url = url.replace(sfx, "")
+    text = (url + " " + body) \
+        .replace("&", " ").replace("=", " ").replace("+", " ") \
+        .replace("?", " ").replace("/", " ") \
+        .replace("%27", " SQLI_QUOTE ") \
+        .replace("%3B", " SQLI_SEMI ").replace("%3b", " SQLI_SEMI ") \
+        .replace("%2F", " ENC_SLASH ").replace("%2f", " ENC_SLASH ") \
+        .replace("%3C", " XSS_LT ").replace("%3c", " XSS_LT ") \
+        .replace("%3E", " XSS_GT ").replace("%3e", " XSS_GT ") \
+        .replace("%00", " NULL_BYTE ") \
+        .replace("--",  " SQLI_COMMENT ") \
+        .replace("/*",  " SQLI_COMMENT ")
+    return text.lower()
+
+
 class HTTPDetector:
-    """
-    ML-based HTTP anomaly detector.
-    """
 
     def __init__(self):
+        self.scaler    = joblib.load(MODELS_DIR / "scaler.pkl")
+        self.tfidf     = joblib.load(MODELS_DIR / "tfidf.pkl")
+        self.rf        = joblib.load(MODELS_DIR / "random_forest.pkl")
+        self.iso       = joblib.load(MODELS_DIR / "isolation_forest.pkl")
+        self.threshold = float(joblib.load(MODELS_DIR / "threshold.pkl"))
 
-        self._check_models()
+    def predict(self, request: dict) -> dict:
+        # Hand-crafted features
+        row      = pd.Series(request)
+        hc_feat  = np.array(extract_features_from_row(row)).reshape(1, -1)
+        hc_scaled = self.scaler.transform(hc_feat)
 
-        self.scaler = joblib.load(MODELS_DIR / "scaler.pkl")
-        self.rf     = joblib.load(MODELS_DIR / "random_forest.pkl")
-        self.iso    = joblib.load(MODELS_DIR / "isolation_forest.pkl")
+        # TF-IDF features
+        text      = _build_payload_text(request)
+        tfidf_vec = self.tfidf.transform([text])
 
-        print("✅ ML models loaded successfully")
+        # Combined
+        X_combined = hstack([csr_matrix(hc_scaled), tfidf_vec])
 
-    def _check_models(self):
-        required = [
-            "scaler.pkl",
-            "random_forest.pkl",
-            "isolation_forest.pkl"
-        ]
+        # RF prediction
+        rf_proba       = float(self.rf.predict_proba(X_combined)[0, 1])
+        classification = "malicious" if rf_proba >= self.threshold else "benign"
 
-        for m in required:
-            path = MODELS_DIR / m
-            if not path.exists():
-                raise FileNotFoundError(
-                    f"Missing model file: {path}. Run training/train.py first."
-                )
-
-    # ─────────────────────────────────────────
-    # Single request prediction
-    # ─────────────────────────────────────────
-
-    def predict(self, request: Dict) -> Dict:
-        """
-        Classify a single HTTP request.
-
-        Expected request fields:
-            method, url, content_type, cookie,
-            length, content, user_agent
-        """
-
-        row = pd.Series(request)
-
-        features = extract_features_from_row(row)
-
-        X = np.array(features).reshape(1, -1)
-
-        X_scaled = self.scaler.transform(X)
-
-        # Random Forest
-        rf_pred  = int(self.rf.predict(X_scaled)[0])
-        rf_prob  = float(self.rf.predict_proba(X_scaled)[0][1])
-
-        # Isolation Forest
-        iso_pred = self.iso.predict(X_scaled)[0]
-        iso_flag = 1 if iso_pred == -1 else 0
+        # Isolation Forest (on hand-crafted only)
+        iso_flag = int(self.iso.predict(hc_scaled)[0] == -1)
 
         # Ensemble threat score
-        threat_score = 0.8 * rf_prob + 0.2 * iso_flag
-
-        classification = (
-            "malicious" if threat_score >= 0.5 else "benign"
-        )
+        threat_score = round(0.85 * rf_proba + 0.15 * iso_flag, 4)
 
         return {
-            "classification": classification,
-            "threat_score": round(threat_score, 4),
-            "rf_probability": round(rf_prob, 4),
-            "iso_flag": iso_flag,
-            "features": [round(f, 6) for f in features]
-        }
-
-    # ─────────────────────────────────────────
-    # Batch prediction
-    # ─────────────────────────────────────────
-
-    def predict_batch(self, requests: List[Dict]) -> List[Dict]:
-        """
-        Predict multiple HTTP requests.
-        """
-
-        results = []
-
-        for req in requests:
-            results.append(self.predict(req))
-
-        return results
-
-    # ─────────────────────────────────────────
-    # Debug info
-    # ─────────────────────────────────────────
-
-    def info(self) -> Dict:
-        """
-        Return detector metadata.
-        """
-
-        return {
-            "model": "RandomForest + IsolationForest",
-            "ensemble_weights": {"rf": 0.8, "iso": 0.2},
-            "feature_count": 41,
+            "classification":  classification,
+            "threat_score":    threat_score,
+            "rf_confidence":   round(rf_proba, 4),
+            "iso_flag":        iso_flag,
+            "features":        hc_feat[0].tolist(),
+            "latency_ms":      0.0,
         }
