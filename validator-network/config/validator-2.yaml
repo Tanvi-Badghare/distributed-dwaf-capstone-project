@@ -1,0 +1,7 @@
+node_id: 2
+port: 9002
+peers:
+  - "localhost:9000"
+  - "localhost:9001"
+zkp_layer_url: "http://localhost:8080"
+threshold: 0.51
