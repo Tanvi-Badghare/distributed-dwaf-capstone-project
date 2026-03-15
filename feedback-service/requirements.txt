@@ -1,0 +1,7 @@
+fastapi==0.115.0
+uvicorn==0.30.6
+pydantic==2.9.2
+requests==2.32.3
+schedule==1.2.2
+python-dateutil==2.9.0
+typing-extensions==4.12.2
