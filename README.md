@@ -1,88 +1,161 @@
 # Distributed Web Application Firewall (DWAF)
-This is a research-only defensive system demonstrating distributed anomaly detection, ZKP verification, and consensus-based threat validation. All vulnerable apps are intentionally sandboxed and isolated for academic experimentation.
+
+> ⚠️ **Research Notice:** This is a research-only defensive system demonstrating distributed anomaly detection, ZKP verification, and consensus-based threat validation. All components are intentionally sandboxed and isolated for academic experimentation. Not intended for production use.
+
+---
 
 ## Overview
-- The Distributed Web Application Firewall (DWAF) is a federated security architecture that combines machine learning–based anomaly detection, zero-knowledge cryptographic attestation (Groth16), distributed validator voting, and STIX/TAXII–based threat intelligence sharing.
 
-- DWAF enables collaborative threat detection across multiple nodes while preserving sensitive traffic data through privacy-preserving proof generation and structured intelligence dissemination.
+DWAF is a federated security architecture combining:
+
+- **Machine learning–based anomaly detection** across distributed traffic streams
+- **Zero-knowledge cryptographic attestation** (Groth16/BN254) for privacy-preserving threat verification
+- **Distributed validator consensus** for multi-node threat agreement
+- **STIX 2.1 / TAXII 2.1** threat intelligence sharing
+
+DWAF enables collaborative threat detection across multiple nodes while preserving sensitive traffic data through privacy-preserving proof generation and structured intelligence dissemination.
+
+---
 
 ## Architecture
+
 DWAF operates as a multi-stage security pipeline:
-
-1) **Federated ML-Based Anomaly Detection**
-- Real-time inference using ensemble models (Isolation Forest + Random Forest) on distributed traffic streams.
-
-2) **Zero-Knowledge Threat Attestation (Groth16)**
-- Generates succinct non-interactive proofs of malicious inference without exposing raw traffic features.
-
-3) **Distributed Validator Voting Protocol**
-- Independent validator nodes verify ZKP correctness and reach agreement using threshold-based majority voting.
-
-4) **Structured Threat Intelligence Dissemination (STIX 2.1 / TAXII 2.1)**
-- Validated threats are encoded as STIX objects and distributed via TAXII collections to participating WAF nodes.
-
-5) **Adaptive Federated Mitigation**
-- Approved threat indicators update enforcement rules and inform local model adaptation across nodes.
 
 ![Architectural Diagram](./docs/dwaf-capstone-flowchart.png)
 
+| Stage | Component | Description |
+|-------|-----------|-------------|
+| 1 | **ML Detection** | Ensemble anomaly detection on distributed traffic streams |
+| 2 | **ZKP Attestation** | Groth16 proofs of malicious inference without exposing raw features |
+| 3 | **Validator Voting** | Threshold-based majority voting across independent validator nodes |
+| 4 | **Threat Intelligence** | STIX 2.1 objects distributed via TAXII 2.1 collections |
+| 5 | **Adaptive Mitigation** | Validated threats update enforcement rules and retrain local models |
+
+---
+
 ## Core Components
-(I) **🔍 Federated ML-Based Detection**
-- Ensemble anomaly detection (Isolation Forest + Random Forest)
 
-(II) **🔐 Zero-Knowledge Threat Attestation (Groth16)**
+### 🔍 ML Detector (`ml-detector/`)
+- Ensemble anomaly detection — Isolation Forest + Random Forest
+- Real-time feature extraction and inference
+- Adaptive model retraining via feedback loop
+
+### 🔐 ZKP Layer (`zkp-layer/`)
+- Groth16 zero-knowledge proof system over BN254 curve
+- Poseidon hash commitments for feature vectors
 - Proves malicious inference without exposing raw traffic data
+- Written in Rust
 
-(III) **🗳 Distributed Validator Voting**
-- Multi-node threshold-based verification of ZKP proofs
+### 🗳 Validator Network (`validator-network/`)
+- Distributed consensus protocol in Go
+- Independent ZKP verification across validator nodes
+- Threshold-based majority voting
 
-(IV) **🌐 Structured Threat Sharing (STIX 2.1 / TAXII 2.1)**
-- Standardised intelligence dissemination across nodes
+### 🌐 TAXII Server (`taxii-server/`)
+- STIX 2.1 threat object encoding
+- TAXII 2.1 collection distribution
+- Standardised intelligence dissemination
 
-(V) **🔄 Adaptive Federated Mitigation**
-- Validated threats update enforcement rules and inform model adaptation
+### 🔄 Feedback Service (`feedback-service/`)
+- Continuous model retraining loop
+- WAF rule adaptation from validated threats
+
+### 🎯 Orchestrator (`orchestrator/`)
+- Go-based pipeline coordinator
+- Service health management and routing
+
+---
 
 ## Tech Stack
-• Rust – ZKP layer
-• Python (Flask) – ML detector & TAXII server
-• Docker / Docker Compose – Service orchestration
-• STIX 2.1 / TAXII 2.1 – Threat intelligence standardization
-• Groth16 (BN254) – Zero-knowledge proof system
+
+| Layer | Technology |
+|-------|------------|
+| ZKP | Rust — Groth16 (BN254), Poseidon |
+| ML | Python — scikit-learn, Flask |
+| Orchestration | Go |
+| Threat Intelligence | STIX 2.1 / TAXII 2.1 |
+| Infrastructure | Docker / Docker Compose |
+
+---
 
 ## Quick Start
-1️⃣ Build Services
-- make build
 
-2️⃣ Start Core Services
-- make up
+**Prerequisites:** Docker, Docker Compose, Make
 
-3️⃣ Run Full Integration 
-- make up-all
+```bash
+# 1. Build all services
+make build
 
-4️⃣ Check Health
-- make health
+# 2. Start core services
+make up
 
-5️⃣ Run Demo
-- make demo
+# 3. Run full integration
+make up-all
 
+# 4. Check health
+make health
+
+# 5. Run demo
+make demo
+```
+
+---
+
+## Project Structure
+
+```
+dwaf_capstone_project/
+├── ml-detector/          # Python ML anomaly detection service
+├── zkp-layer/            # Rust ZKP proof generation and verification
+├── validator-network/    # Go distributed consensus and voting
+├── orchestrator/         # Go pipeline coordinator
+├── taxii-server/         # Python STIX/TAXII threat intelligence
+├── feedback-service/     # Python adaptive model retraining
+├── config/               # Shared configuration and ZKP parameters
+├── scripts/              # Build and deployment automation
+├── tests/                # Integration and unit tests
+└── docs/                 # Architecture documentation
+```
+
+---
 
 ## Authors and Contributions
-- **Tanvi Badghare** led the project, designed the end-to-end system architecture, and developed the Zero-Knowledge Proof (Groth16)–based privacy validation layer and distributed verification workflow.
-- **Aditi Pandey** and **Anjali** implemented, tuned, and evaluated the machine learning–based anomaly detection models (Isolation Forest and Random Forest).
-- **Jivesh Rai** designed and implemented the STIX 2.1 / TAXII 2.1 threat intelligence distribution module.
-- **Anshul** contributed to technical documentation, system structuring, and repository organization.
+
+| Contributor | Role |
+|-------------|------|
+| **Tanvi Badghare** | System architecture, ZKP layer (Groth16), distributed verification workflow |
+| **Aditi Pandey & Anjali** | ML anomaly detection models (Isolation Forest, Random Forest) |
+| **Jivesh Rai** | STIX 2.1 / TAXII 2.1 threat intelligence module |
+| **Anshul** | Technical documentation and repository organisation |
+
+---
 
 ## Research Context
+
 DWAF is an experimental exploration of combining:
-- Privacy-preserving cryptography
-- Distributed validation
+- Privacy-preserving cryptography (ZKP)
+- Distributed validation and consensus
 - Standardised cyber threat intelligence
 - Federated anomaly detection
+
 into a unified distributed WAF architecture.
 
-## ⚠️ ⚠️ Security & Key Management Notice
-- ZKP parameters and cryptographic keys included are for demonstration/testing only
-- Production-grade trusted setup and secure key storage are not yet implemented
-- Sensitive material will be excluded from version control in future hardened versions
+---
 
+## Roadmap
 
+- [ ] `ml-detector/README.md` — model training and evaluation docs
+- [ ] `zkp-layer/README.md` — circuit design and proof system docs
+- [ ] `validator-network/README.md` — consensus protocol docs
+- [ ] `docs/DEPLOYMENT.md` — production deployment guide
+- [ ] Trusted setup ceremony documentation
+- [ ] Benchmark suite for proof generation latency
+
+---
+
+## ⚠️ Security & Key Management Notice
+
+- ZKP parameters and cryptographic keys are for **demonstration and testing only**
+- Production-grade trusted setup and secure key storage are **not yet implemented**
+- `config/zkp-params.json` contains configuration only — no real cryptographic material
+- Sensitive key material (`*.bin`) is excluded from version control via `.gitignore`
