@@ -7,21 +7,16 @@
 //! - Integer semantics preserved (no unsafe field division)
 
 use ark_bn254::Fr;
+use ark_crypto_primitives::sponge::poseidon::constraints::PoseidonSpongeVar;
+use ark_crypto_primitives::sponge::{
+    constraints::CryptographicSpongeVar, poseidon::PoseidonConfig,
+};
 use ark_ff::Zero;
 use ark_r1cs_std::{
-    alloc::AllocVar,
-    boolean::Boolean,
-    eq::EqGadget,
-    fields::fp::FpVar,
-    select::CondSelectGadget,
+    alloc::AllocVar, boolean::Boolean, eq::EqGadget, fields::fp::FpVar, select::CondSelectGadget,
     ToBitsGadget,
 };
 use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError};
-use ark_crypto_primitives::sponge::{
-    poseidon::PoseidonConfig,
-    constraints::CryptographicSpongeVar,
-};
-use ark_crypto_primitives::sponge::poseidon::constraints::PoseidonSpongeVar;
 
 const NUM_FEATURES: usize = 41;
 const NUM_WEIGHTS: usize = 12;
@@ -63,14 +58,16 @@ impl ConstraintSynthesizer<Fr> for MLInferenceCircuit {
         // =========================
         // Allocate Public Inputs
         // =========================
-        let commitment_var =
-            FpVar::new_input(cs.clone(), || Ok(self.feature_commitment.unwrap_or(Fr::zero())))?;
+        let commitment_var = FpVar::new_input(cs.clone(), || {
+            Ok(self.feature_commitment.unwrap_or(Fr::zero()))
+        })?;
 
         let model_hash_var =
             FpVar::new_input(cs.clone(), || Ok(self.model_hash.unwrap_or(Fr::zero())))?;
 
-        let classification_var =
-            FpVar::new_input(cs.clone(), || Ok(self.classification_result.unwrap_or(Fr::zero())))?;
+        let classification_var = FpVar::new_input(cs.clone(), || {
+            Ok(self.classification_result.unwrap_or(Fr::zero()))
+        })?;
 
         let threat_score_var =
             FpVar::new_input(cs.clone(), || Ok(self.threat_score.unwrap_or(Fr::zero())))?;
@@ -151,28 +148,32 @@ impl ConstraintSynthesizer<Fr> for MLInferenceCircuit {
         let two = FpVar::Constant(Fr::from(2u64));
         let is_majority = vote_sum.is_cmp(&two, std::cmp::Ordering::Greater, true)?;
 
-        let one_fp   = FpVar::Constant(Fr::from(1u64));
-        let zero_fp  = FpVar::Constant(Fr::zero());
+        let one_fp = FpVar::Constant(Fr::from(1u64));
+        let zero_fp = FpVar::Constant(Fr::zero());
 
-        let computed_classification =
-            FpVar::conditionally_select(&is_majority, &one_fp, &zero_fp)?;
+        let computed_classification = FpVar::conditionally_select(&is_majority, &one_fp, &zero_fp)?;
         computed_classification.enforce_equal(&classification_var)?;
 
         // =========================
         // Threat Score Mapping (Integer Safe)
         // =========================
         let thirty_three = FpVar::Constant(Fr::from(33u64));
-        let sixty_six    = FpVar::Constant(Fr::from(66u64));
-        let hundred      = FpVar::Constant(Fr::from(100u64));
+        let sixty_six = FpVar::Constant(Fr::from(66u64));
+        let hundred = FpVar::Constant(Fr::from(100u64));
 
         let is_zero = vote_sum.is_eq(&zero_fp)?;
-        let is_one  = vote_sum.is_eq(&FpVar::Constant(Fr::from(1u64)))?;
-        let is_two  = vote_sum.is_eq(&FpVar::Constant(Fr::from(2u64)))?;
+        let is_one = vote_sum.is_eq(&FpVar::Constant(Fr::from(1u64)))?;
+        let is_two = vote_sum.is_eq(&FpVar::Constant(Fr::from(2u64)))?;
 
-        let computed_score =
-            FpVar::conditionally_select(&is_zero, &zero_fp,
-            &FpVar::conditionally_select(&is_one, &thirty_three,
-            &FpVar::conditionally_select(&is_two, &sixty_six, &hundred)?)?)?;
+        let computed_score = FpVar::conditionally_select(
+            &is_zero,
+            &zero_fp,
+            &FpVar::conditionally_select(
+                &is_one,
+                &thirty_three,
+                &FpVar::conditionally_select(&is_two, &sixty_six, &hundred)?,
+            )?,
+        )?;
 
         computed_score.enforce_equal(&threat_score_var)?;
 

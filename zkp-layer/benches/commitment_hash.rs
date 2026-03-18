@@ -1,5 +1,5 @@
-use criterion::{criterion_group, criterion_main, Criterion};
 use ark_bn254::Fr;
+use criterion::{criterion_group, criterion_main, Criterion};
 use zkp_waf::utils::compute_commitment;
 
 fn bench_commitment(c: &mut Criterion) {

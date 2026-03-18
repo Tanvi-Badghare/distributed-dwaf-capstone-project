@@ -35,13 +35,7 @@ pub mod errors;
 
 pub use circuits::MLInferenceCircuit;
 
-pub use prover::{
-    generate_proof,
-    setup_prover,
-    load_proving_key,
-    save_proving_key,
-    ProofData,
-};
+pub use prover::{generate_proof, load_proving_key, save_proving_key, setup_prover, ProofData};
 
 pub use verifier::validator_verify_threat;
 

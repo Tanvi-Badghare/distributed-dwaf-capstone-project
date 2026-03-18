@@ -1,11 +1,11 @@
 //! Production-grade ZKP Verifier for Validator Nodes
 
 use ark_bn254::{Bn254, Fr};
+use ark_ff::{BigInteger, PrimeField};
 use ark_groth16::{Groth16, PreparedVerifyingKey, Proof};
 use ark_serialize::CanonicalDeserialize;
-use ark_ff::{PrimeField, BigInteger};
 
-use crate::errors::{ZKPError, Result};
+use crate::errors::{Result, ZKPError};
 
 #[allow(dead_code)]
 /// Verification result returned to validator logic
@@ -21,7 +21,6 @@ pub fn validator_verify_threat(
     public_inputs_bytes: &[Vec<u8>],
     vk: &PreparedVerifyingKey<Bn254>,
 ) -> Result<bool> {
-
     // -------------------------
     // Deserialize Proof
     // -------------------------

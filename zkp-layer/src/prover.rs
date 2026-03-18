@@ -1,16 +1,16 @@
 //! Production-grade Proof Generation Module
 
 use ark_bn254::{Bn254, Fr};
-use ark_groth16::{Groth16, ProvingKey};
-use ark_serialize::{CanonicalSerialize, CanonicalDeserialize};
-use ark_std::{rand::rngs::StdRng, rand::SeedableRng, Zero};
 use ark_crypto_primitives::snark::SNARK;
+use ark_groth16::{Groth16, ProvingKey};
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use ark_std::{rand::rngs::StdRng, rand::SeedableRng, Zero};
 use std::fs::File;
 use std::path::Path;
 
 use crate::circuits::MLInferenceCircuit;
-use crate::utils::{floats_to_fields, validate_features, validate_weights, compute_commitment};
-use crate::errors::{ZKPError, Result};
+use crate::errors::{Result, ZKPError};
+use crate::utils::{compute_commitment, floats_to_fields, validate_features, validate_weights};
 
 /// Proof container for transport
 #[derive(Debug, Clone)]
@@ -38,11 +38,8 @@ pub fn setup_prover(
 
     let mut rng = StdRng::seed_from_u64(0u64);
 
-    let params = Groth16::<Bn254>::generate_random_parameters_with_reduction(
-        circuit,
-        &mut rng,
-    )
-    .map_err(|e| ZKPError::Setup(e.to_string()))?;
+    let params = Groth16::<Bn254>::generate_random_parameters_with_reduction(circuit, &mut rng)
+        .map_err(|e| ZKPError::Setup(e.to_string()))?;
 
     tracing::info!("Proving key generated");
     Ok(params)
@@ -106,11 +103,7 @@ pub fn generate_proof(
     let result_field = match classification {
         "benign" => Fr::from(0u64),
         "malicious" => Fr::from(1u64),
-        _ => {
-            return Err(ZKPError::InvalidInput(
-                "Invalid classification".into(),
-            ))
-        }
+        _ => return Err(ZKPError::InvalidInput("Invalid classification".into())),
     };
 
     let score_field = Fr::from((threat_score * 100.0).round() as u64);
@@ -142,21 +135,18 @@ pub fn generate_proof(
         .map_err(|_| ZKPError::ProofGeneration)?;
 
     let mut proof_bytes = Vec::new();
-    proof.serialize_compressed(&mut proof_bytes)
+    proof
+        .serialize_compressed(&mut proof_bytes)
         .map_err(|e| ZKPError::Serialization(e.to_string()))?;
 
     // Public inputs must match circuit order
-    let public_fields = vec![
-        commitment,
-        model_hash,
-        result_field,
-        score_field,
-    ];
+    let public_fields = vec![commitment, model_hash, result_field, score_field];
 
     let mut public_inputs = Vec::new();
     for field in public_fields {
         let mut bytes = Vec::new();
-        field.serialize_compressed(&mut bytes)
+        field
+            .serialize_compressed(&mut bytes)
             .map_err(|e| ZKPError::Serialization(e.to_string()))?;
         public_inputs.push(bytes);
     }

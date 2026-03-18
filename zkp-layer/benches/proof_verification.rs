@@ -1,8 +1,8 @@
-use criterion::{criterion_group, criterion_main, Criterion};
 use ark_bn254::Fr;
-use ark_crypto_primitives::sponge::poseidon::{PoseidonConfig, find_poseidon_ark_and_mds};
+use ark_crypto_primitives::sponge::poseidon::{find_poseidon_ark_and_mds, PoseidonConfig};
 use ark_groth16::prepare_verifying_key;
-use zkp_waf::prover::{setup_prover, generate_proof};
+use criterion::{criterion_group, criterion_main, Criterion};
+use zkp_waf::prover::{generate_proof, setup_prover};
 use zkp_waf::verifier::validator_verify_threat;
 
 fn make_poseidon() -> PoseidonConfig<Fr> {
@@ -30,12 +30,8 @@ fn bench_proof_verification(c: &mut Criterion) {
 
     c.bench_function("proof_verification", |b| {
         b.iter(|| {
-            validator_verify_threat(
-                &proof_data.proof_bytes,
-                &proof_data.public_inputs,
-                &pvk,
-            )
-            .expect("verification failed");
+            validator_verify_threat(&proof_data.proof_bytes, &proof_data.public_inputs, &pvk)
+                .expect("verification failed");
         });
     });
 }

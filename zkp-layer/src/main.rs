@@ -1,13 +1,10 @@
 //! ZKP-WAF API Server
 //! REST interface for Groth16 proof generation & verification
 
-use actix_web::{
-    middleware,
-    web, App, HttpResponse, HttpServer, Result as ActixResult,
-};
+use actix_web::{middleware, web, App, HttpResponse, HttpServer, Result as ActixResult};
 use ark_bn254::{Bn254, Fr};
-use ark_groth16::{PreparedVerifyingKey, ProvingKey};
 use ark_crypto_primitives::sponge::poseidon::PoseidonConfig;
+use ark_groth16::{PreparedVerifyingKey, ProvingKey};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, RwLock};
@@ -87,11 +84,7 @@ async fn health_check(data: web::Data<AppState>) -> ActixResult<HttpResponse> {
     let pk_loaded = data.proving_key.read().unwrap().is_some();
     let vk_loaded = data.verification_key.read().unwrap().is_some();
 
-    let uptime = data
-        .start_time
-        .elapsed()
-        .unwrap_or_default()
-        .as_secs();
+    let uptime = data.start_time.elapsed().unwrap_or_default().as_secs();
 
     Ok(HttpResponse::Ok().json(HealthResponse {
         status: if pk_loaded && vk_loaded {
@@ -119,15 +112,15 @@ async fn generate_proof_endpoint(
     let pk = match pk_guard.as_ref() {
         Some(k) => k,
         None => {
-            return Ok(HttpResponse::ServiceUnavailable().json(
-                GenerateProofResponse {
+            return Ok(
+                HttpResponse::ServiceUnavailable().json(GenerateProofResponse {
                     success: false,
                     proof: None,
                     public_inputs: None,
                     generation_time_ms: 0,
                     error: Some("Proving key not loaded".into()),
-                },
-            ))
+                }),
+            )
         }
     };
 
@@ -160,15 +153,15 @@ async fn generate_proof_endpoint(
         }
         Err(e) => {
             tracing::error!("Proof generation failed: {}", e);
-            Ok(HttpResponse::InternalServerError().json(
-                GenerateProofResponse {
+            Ok(
+                HttpResponse::InternalServerError().json(GenerateProofResponse {
                     success: false,
                     proof: None,
                     public_inputs: None,
                     generation_time_ms: start.elapsed().as_millis(),
                     error: Some(e.to_string()),
-                },
-            ))
+                }),
+            )
         }
     }
 }
@@ -185,14 +178,14 @@ async fn verify_proof_endpoint(
     let vk = match vk_guard.as_ref() {
         Some(v) => v,
         None => {
-            return Ok(HttpResponse::ServiceUnavailable().json(
-                VerifyProofResponse {
+            return Ok(
+                HttpResponse::ServiceUnavailable().json(VerifyProofResponse {
                     success: false,
                     is_valid: false,
                     verification_time_ms: 0,
                     error: Some("Verification key not loaded".into()),
-                },
-            ))
+                }),
+            )
         }
     };
 
@@ -200,14 +193,12 @@ async fn verify_proof_endpoint(
     let proof_bytes = match BASE64.decode(&req.proof) {
         Ok(bytes) => bytes,
         Err(_) => {
-            return Ok(HttpResponse::BadRequest().json(
-                VerifyProofResponse {
-                    success: false,
-                    is_valid: false,
-                    verification_time_ms: 0,
-                    error: Some("Invalid base64 proof".into()),
-                },
-            ))
+            return Ok(HttpResponse::BadRequest().json(VerifyProofResponse {
+                success: false,
+                is_valid: false,
+                verification_time_ms: 0,
+                error: Some("Invalid base64 proof".into()),
+            }))
         }
     };
 
@@ -217,14 +208,12 @@ async fn verify_proof_endpoint(
         match BASE64.decode(input) {
             Ok(bytes) => public_inputs_bytes.push(bytes),
             Err(_) => {
-                return Ok(HttpResponse::BadRequest().json(
-                    VerifyProofResponse {
-                        success: false,
-                        is_valid: false,
-                        verification_time_ms: 0,
-                        error: Some("Invalid base64 public input".into()),
-                    },
-                ))
+                return Ok(HttpResponse::BadRequest().json(VerifyProofResponse {
+                    success: false,
+                    is_valid: false,
+                    verification_time_ms: 0,
+                    error: Some("Invalid base64 public input".into()),
+                }))
             }
         }
     }
@@ -241,14 +230,14 @@ async fn verify_proof_endpoint(
         }
         Err(e) => {
             tracing::error!("Verification failed: {}", e);
-            Ok(HttpResponse::InternalServerError().json(
-                VerifyProofResponse {
+            Ok(
+                HttpResponse::InternalServerError().json(VerifyProofResponse {
                     success: false,
                     is_valid: false,
                     verification_time_ms: start.elapsed().as_millis(),
                     error: Some(e.to_string()),
-                },
-            ))
+                }),
+            )
         }
     }
 }

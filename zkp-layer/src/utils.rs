@@ -1,8 +1,8 @@
 //! Utility functions for ZKP operations.
 
+use crate::errors::{Result, ZKPError};
 use ark_bn254::Fr;
 use ark_ff::{BigInteger, PrimeField};
-use crate::errors::{Result, ZKPError};
 
 /// Fixed-point scaling factor (3 decimal places).
 pub const SCALE_FACTOR: i64 = 1_000;
@@ -25,9 +25,7 @@ pub const EXPECTED_WEIGHTS: usize = 3 * 4; // 3 trees × 4 levels
 /// - Values exceeding i64 range after scaling
 pub fn float_to_field(value: f64) -> Result<Fr> {
     if !value.is_finite() {
-        return Err(ZKPError::InvalidInput(
-            "Float must be finite".into(),
-        ));
+        return Err(ZKPError::InvalidInput("Float must be finite".into()));
     }
 
     let scaled = (value * SCALE_FACTOR as f64).round();

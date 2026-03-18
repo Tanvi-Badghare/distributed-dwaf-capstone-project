@@ -1,7 +1,7 @@
-use criterion::{criterion_group, criterion_main, Criterion};
 use ark_bn254::Fr;
-use ark_crypto_primitives::sponge::poseidon::{PoseidonConfig, find_poseidon_ark_and_mds};
-use zkp_waf::prover::{setup_prover, generate_proof};
+use ark_crypto_primitives::sponge::poseidon::{find_poseidon_ark_and_mds, PoseidonConfig};
+use criterion::{criterion_group, criterion_main, Criterion};
+use zkp_waf::prover::{generate_proof, setup_prover};
 
 fn make_poseidon() -> PoseidonConfig<Fr> {
     let (ark, mds) = find_poseidon_ark_and_mds::<Fr>(254, 2, 8, 31, 0);

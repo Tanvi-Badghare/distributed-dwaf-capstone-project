@@ -15,7 +15,6 @@ pub enum ZKPError {
     // =============================
     // Circuit & Proof Lifecycle
     // =============================
-
     #[error("Circuit constraint generation failed")]
     ConstraintGeneration,
 
@@ -31,7 +30,6 @@ pub enum ZKPError {
     // =============================
     // Input & Serialization
     // =============================
-
     #[error("Serialization error: {0}")]
     Serialization(String),
 
@@ -41,14 +39,12 @@ pub enum ZKPError {
     // =============================
     // Setup / Configuration
     // =============================
-
     #[error("Trusted setup failed: {0}")]
     Setup(String),
 
     // =============================
     // External/System Errors
     // =============================
-
     #[error("IO error")]
     Io(#[from] std::io::Error),
 
