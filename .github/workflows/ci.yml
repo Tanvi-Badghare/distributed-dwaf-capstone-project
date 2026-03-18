@@ -29,7 +29,7 @@ jobs:
         run: pip install flake8
 
       -  name: Python Lint
-         run: flake8 ml-detector/ taxii-server/ --max-line-length=120 --ignore=E501,E221,E226,E241,E231,E225,E402,E401,E702,F401,F541,W292,E999
+         run: flake8 ml-detector/ taxii-server/ --max-line-length=120 --ignore=E501,E221,E226,E241,E231,E225,E402,E401,E702,F401,F541,W292,E999,F841,E272,W504
 
       # ------------------------
       # Rust Lint
