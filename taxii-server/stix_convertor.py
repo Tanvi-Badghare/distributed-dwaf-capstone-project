@@ -18,7 +18,10 @@ def threat_to_stix(event: dict) -> Indicator:
         id=f"indicator--{uuid.uuid4()}",
         name="DWAF Verified Threat",
         description=(
-            f"Malicious request detected: {event.get('request_id', 'unknown')}. "
+            f"Malicious request detected: {
+                event.get(
+                    'request_id',
+                    'unknown')}. "
             f"Score: {event.get('threat_score', 0):.3f}. "
             f"Consensus: {event.get('consensus', False)}."
         ),
@@ -27,9 +30,9 @@ def threat_to_stix(event: dict) -> Indicator:
         valid_from=now,
         labels=["malicious-activity", event.get("classification", "unknown")],
         custom_properties={
-            "x_dwaf_request_id":    event.get("request_id", ""),
-            "x_dwaf_score":         event.get("threat_score", 0),
-            "x_dwaf_consensus":     event.get("consensus", False),
+            "x_dwaf_request_id": event.get("request_id", ""),
+            "x_dwaf_score": event.get("threat_score", 0),
+            "x_dwaf_consensus": event.get("consensus", False),
             "x_dwaf_classification": event.get("classification", ""),
         },
     )

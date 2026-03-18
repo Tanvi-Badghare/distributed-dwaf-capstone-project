@@ -5,6 +5,8 @@ Usage:
     python training/evaluate.py --csv training/csic2010/csic2010.csv
 """
 
+from dataset import load_csic_csv
+from feature_extractor import extract_features_df, FEATURE_NAMES
 import sys
 import argparse
 import joblib
@@ -24,8 +26,6 @@ from sklearn.model_selection import train_test_split
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from feature_extractor import extract_features_df, FEATURE_NAMES
-from dataset import load_csic_csv
 
 MODELS_DIR = Path(__file__).parent.parent / "models"
 
@@ -93,14 +93,23 @@ def _print_metrics(y_true, y_pred, y_prob, label: str):
     fnr = fn / (fn + tp) if (fn + tp) > 0 else 0.0
     fpr = fp / (fp + tn) if (fp + tn) > 0 else 0.0
 
-    print(f"\n{'─'*55}")
+    print(f"\n{'─' * 55}")
     print(f"  {label}")
-    print(f"{'─'*55}")
+    print(f"{'─' * 55}")
 
-    print(f"  Accuracy  : {acc:.4f}  {'✅' if acc >= TARGETS['accuracy'][0] else '❌'}")
+    print(
+        f"  Accuracy  : {
+            acc:.4f}  {
+            '✅' if acc >= TARGETS['accuracy'][0] else '❌'}")
     print(f"  F1        : {f1:.4f}  {'✅' if f1 >= TARGETS['f1'][0] else '❌'}")
-    print(f"  FNR       : {fnr:.4f}  {'✅' if fnr <= TARGETS['fnr'][0] else '❌'}")
-    print(f"  FPR       : {fpr:.4f}  {'✅' if fpr <= TARGETS['fpr'][0] else '❌'}")
+    print(
+        f"  FNR       : {
+            fnr:.4f}  {
+            '✅' if fnr <= TARGETS['fnr'][0] else '❌'}")
+    print(
+        f"  FPR       : {
+            fpr:.4f}  {
+            '✅' if fpr <= TARGETS['fpr'][0] else '❌'}")
     print(f"  ROC-AUC   : {auc:.4f}")
 
     print(f"\n  TP={tp}  TN={tn}  FP={fp}  FN={fn}\n")
@@ -176,9 +185,9 @@ def evaluate(df: pd.DataFrame):
     X_te = hstack([csr_matrix(X_hc_te_s), X_tfidf_te])
 
     # ── Random Forest
-    print("\n" + "═"*55)
+    print("\n" + "═" * 55)
     print("  RANDOM FOREST")
-    print("═"*55)
+    print("═" * 55)
 
     val_proba = rf.predict_proba(X_val)[:, 1]
     te_proba = rf.predict_proba(X_te)[:, 1]
@@ -190,9 +199,9 @@ def evaluate(df: pd.DataFrame):
     _print_metrics(y_te, te_pred, te_proba, "Test")
 
     # ── Isolation Forest
-    print("\n" + "═"*55)
+    print("\n" + "═" * 55)
     print("  ISOLATION FOREST")
-    print("═"*55)
+    print("═" * 55)
 
     iso_val_pred = (iso.predict(X_hc_val_s) == -1).astype(int)
     iso_te_pred = (iso.predict(X_hc_te_s) == -1).astype(int)
@@ -207,9 +216,9 @@ def evaluate(df: pd.DataFrame):
     _print_metrics(y_te, iso_te_pred, iso_te_norm, "Test")
 
     # ── Ensemble
-    print("\n" + "═"*55)
+    print("\n" + "═" * 55)
     print("  ENSEMBLE (0.85 RF + 0.15 ISO)")
-    print("═"*55)
+    print("═" * 55)
 
     ens_val = 0.85 * val_proba + 0.15 * iso_val_norm
     ens_te = 0.85 * te_proba + 0.15 * iso_te_norm
@@ -221,9 +230,9 @@ def evaluate(df: pd.DataFrame):
     _print_metrics(y_te, ens_te_pred, ens_te, "Test")
 
     # ── Feature importance
-    print("\n" + "═"*55)
+    print("\n" + "═" * 55)
     print("  TOP 20 FEATURE IMPORTANCES")
-    print("═"*55)
+    print("═" * 55)
 
     hc_count = len(FEATURE_NAMES)
     hc_importances = rf.feature_importances_[:hc_count]

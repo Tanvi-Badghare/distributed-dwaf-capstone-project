@@ -14,14 +14,14 @@ from pydantic import BaseModel
 
 from stix_convertor import threat_to_stix
 
-# ── Setup ─────────────────────────────────────────────────────────────────────
+# ── Setup ───────────────────────────────────────────────────────────────
 
 app = FastAPI(title="DWAF TAXII Server")
 
 COLLECTION_PATH = "collections/verified-threats.json"
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# ── Helpers ─────────────────────────────────────────────────────────────
 
 def load_collection():
     if not os.path.exists(COLLECTION_PATH):
@@ -36,25 +36,25 @@ def save_collection(data):
         json.dump(data, f, indent=2)
 
 
-# ── Models ────────────────────────────────────────────────────────────────────
+# ── Models ──────────────────────────────────────────────────────────────
 
 class ThreatEvent(BaseModel):
-    request_id:     str
+    request_id: str
     classification: str
-    threat_score:   float
-    consensus:      bool
+    threat_score: float
+    consensus: bool
 
 
 class PublishRequest(BaseModel):
     events: List[ThreatEvent]
 
 
-# ── Endpoints ─────────────────────────────────────────────────────────────────
+# ── Endpoints ───────────────────────────────────────────────────────────
 
 @app.get("/health")
 def health():
     return {
-        "status":  "healthy",
+        "status": "healthy",
         "service": "taxii-server",
         "threats": len(load_collection()),
     }
@@ -65,8 +65,8 @@ def get_collections():
     return {
         "collections": [
             {
-                "id":       "verified-threats",
-                "title":    "DWAF Verified Threat Intelligence",
+                "id": "verified-threats",
+                "title": "DWAF Verified Threat Intelligence",
                 "can_read": True,
                 "can_write": True,
             }
@@ -89,7 +89,7 @@ def publish_events(req: PublishRequest):
     return {"status": "published", "count": len(req.events)}
 
 
-# ── Entry point ───────────────────────────────────────────────────────────────
+# ── Entry point ─────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=6000, log_level="info")

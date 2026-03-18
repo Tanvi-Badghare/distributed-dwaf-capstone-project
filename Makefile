@@ -1,4 +1,4 @@
-.PHONY: all setup install-deps build build-no-cache up up-all down restart logs clean test benchmark demo help health status
+.PHONY: all setup install-deps build build-no-cache up up-all down restart logs clean test benchmark demo help health status train
 
 # Default target
 all: help
@@ -74,6 +74,13 @@ health: ## Fail if any core service is down
 
 status:
 	@docker compose ps
+
+##@ Training
+
+train: ## Train ML models and generate artifacts
+	@echo "🧠 Training ML models..."
+	@docker compose run --rm ml-detector python training/train.py
+	@echo "✅ Models trained and saved to ml-detector/models/"
 
 ##@ Testing
 
