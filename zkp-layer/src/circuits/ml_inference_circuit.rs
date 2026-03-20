@@ -146,8 +146,7 @@ impl ConstraintSynthesizer<Fr> for MLInferenceCircuit {
         let one_fp = FpVar::Constant(Fr::from(1u64));
         let zero_fp = FpVar::Constant(Fr::zero());
 
-        let computed_classification =
-            FpVar::conditionally_select(&is_majority, &one_fp, &zero_fp)?;
+        let computed_classification = FpVar::conditionally_select(&is_majority, &one_fp, &zero_fp)?;
         computed_classification.enforce_equal(&classification_var)?;
 
         // =========================
