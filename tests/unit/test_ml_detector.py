@@ -1,147 +1,177 @@
 """
 tests/unit/test_ml_detector.py
-Unit tests for the ML detector inference pipeline.
-
-Run:
-pytest tests/unit/test_ml_detector.py -v
+Unit tests for detector.py — requires trained models in ml-detector/models/
+Run: pytest tests/unit/test_ml_detector.py -v
 """
 
 import sys
 from pathlib import Path
-import numpy as np
-import pandas as pd
 import pytest
 
-# Add ml-detector module to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "ml-detector"))
 
-from feature_extractor import extract_features_df
-from model_loader import load_model
+# Skip all tests if models not trained yet
+models_dir = Path(__file__).parent.parent.parent / "ml-detector" / "models"
+models_exist = all([
+    (models_dir / "random_forest.pkl").exists(),
+    (models_dir / "scaler.pkl").exists(),
+    (models_dir / "tfidf.pkl").exists(),
+    (models_dir / "threshold.pkl").exists(),
+])
+
+pytestmark = pytest.mark.skipif(
+    not models_exist,
+    reason="Models not trained yet — run: python training/train.py"
+)
+
+from detector import HTTPDetector
 
 
-# ── Fixtures ────────────────────────────────────────────────────────────────
+# ── Fixtures ──────────────────────────────────────────────────────────────────
 
 @pytest.fixture(scope="module")
-def model():
-    """Load the trained ML model once for all tests."""
-    return load_model()
+def detector():
+    return HTTPDetector()
 
 
-@pytest.fixture
-def sample_dataframe():
-    """Create small sample HTTP dataset."""
-    return pd.DataFrame([
-        {
-            "method": "GET",
-            "url": "/index.jsp",
-            "content": "",
-            "cookie": "",
-            "content_type": "",
-            "lenght": 0
-        },
-        {
-            "method": "GET",
-            "url": "/search?q=%27+OR+1%3D1",
-            "content": "",
-            "cookie": "",
-            "content_type": "",
-            "lenght": 0
-        },
-        {
-            "method": "POST",
-            "url": "/login",
-            "content": "user=admin&pass=test",
-            "cookie": "",
-            "content_type": "application/x-www-form-urlencoded",
-            "lenght": 24
-        }
-    ])
+def normal_request():
+    return {
+        "method":       "GET",
+        "url":          "/tienda1/publico/anadir.jsp?id=3&nombre=Vino+Rioja&precio=100&cantidad=55",
+        "user_agent":   "Mozilla/5.0",
+        "content_type": "",
+        "cookie":       "JSESSIONID=ABC123",
+        "length":       0,
+        "content":      "",
+        "host":         "localhost:8080",
+    }
 
 
-# ── Feature extraction pipeline ─────────────────────────────────────────────
-
-def test_feature_extraction_pipeline(sample_dataframe):
-    X = extract_features_df(sample_dataframe)
-
-    assert isinstance(X, np.ndarray)
-    assert X.shape[0] == len(sample_dataframe)
-    assert X.shape[1] == 41
-
-
-# ── Model loading ───────────────────────────────────────────────────────────
-
-def test_model_loaded(model):
-    assert model is not None
+def sqli_request():
+    return {
+        "method":       "GET",
+        "url":          "/anadir.jsp?id=2&cantidad=%27%3B+DROP+TABLE+usuarios%3B+SELECT+*+FROM+datos",
+        "user_agent":   "Mozilla/5.0",
+        "content_type": "",
+        "cookie":       "JSESSIONID=XYZ789",
+        "length":       0,
+        "content":      "",
+        "host":         "localhost:8080",
+    }
 
 
-# ── Prediction output ───────────────────────────────────────────────────────
-
-def test_prediction_shape(model, sample_dataframe):
-    X = extract_features_df(sample_dataframe)
-    preds = model.predict(X)
-
-    assert len(preds) == len(sample_dataframe)
-
-
-def test_prediction_values(model, sample_dataframe):
-    X = extract_features_df(sample_dataframe)
-    preds = model.predict(X)
-
-    for p in preds:
-        assert p in [0, 1]
+def xss_request():
+    return {
+        "method":       "GET",
+        "url":          "/search?q=<script>alert('xss')</script>",
+        "user_agent":   "Mozilla/5.0",
+        "content_type": "",
+        "cookie":       "",
+        "length":       0,
+        "content":      "",
+        "host":         "localhost:8080",
+    }
 
 
-# ── Probability outputs ─────────────────────────────────────────────────────
+# ── Detector initialisation ───────────────────────────────────────────────────
 
-def test_prediction_probabilities(model, sample_dataframe):
-    X = extract_features_df(sample_dataframe)
-
-    if hasattr(model, "predict_proba"):
-        probs = model.predict_proba(X)
-
-        for row in probs:
-            for p in row:
-                assert 0.0 <= p <= 1.0
+def test_detector_loads(detector):
+    assert detector is not None
+    assert detector.rf is not None
+    assert detector.scaler is not None
+    assert detector.tfidf is not None
+    assert 0.0 < detector.threshold < 1.0
 
 
-# ── Attack vs normal detection sanity ───────────────────────────────────────
+# ── Response structure ────────────────────────────────────────────────────────
 
-def test_attack_has_higher_probability(model):
-    df = pd.DataFrame([
-        {"method":"GET","url":"/index.jsp","content":"","cookie":"","content_type":"","lenght":0},
-        {"method":"GET","url":"/search?q=%27+OR+1%3D1--","content":"","cookie":"","content_type":"","lenght":0}
-    ])
-
-    X = extract_features_df(df)
-
-    if hasattr(model, "predict_proba"):
-        probs = model.predict_proba(X)
-
-        normal_prob = probs[0][1]
-        attack_prob = probs[1][1]
-
-        assert attack_prob >= normal_prob
+def test_predict_returns_required_fields(detector):
+    result = detector.predict(normal_request())
+    assert "classification" in result
+    assert "threat_score"   in result
+    assert "rf_confidence"  in result
+    assert "iso_flag"       in result
+    assert "features"       in result
+    assert "latency_ms"     in result
 
 
-# ── Edge cases ──────────────────────────────────────────────────────────────
-
-def test_empty_dataframe(model):
-    df = pd.DataFrame(columns=[
-        "method","url","content","cookie","content_type","lenght"
-    ])
-
-    X = extract_features_df(df)
-
-    assert X.shape[0] == 0
+def test_classification_is_valid_string(detector):
+    result = detector.predict(normal_request())
+    assert result["classification"] in ("malicious", "benign")
 
 
-def test_invalid_input_handling(model):
-    df = pd.DataFrame([
-        {"method":None,"url":None,"content":None,"cookie":None,"content_type":None,"lenght":None}
-    ])
+def test_threat_score_in_range(detector):
+    result = detector.predict(normal_request())
+    assert 0.0 <= result["threat_score"] <= 1.0
 
-    X = extract_features_df(df)
 
-    preds = model.predict(X)
+def test_rf_confidence_in_range(detector):
+    result = detector.predict(normal_request())
+    assert 0.0 <= result["rf_confidence"] <= 1.0
 
-    assert len(preds) == 1
+
+def test_iso_flag_is_binary(detector):
+    result = detector.predict(normal_request())
+    assert result["iso_flag"] in (0, 1)
+
+
+def test_features_length(detector):
+    result = detector.predict(normal_request())
+    assert len(result["features"]) == 41
+
+
+# ── Classification correctness ────────────────────────────────────────────────
+
+def test_sqli_detected_as_malicious(detector):
+    result = detector.predict(sqli_request())
+    assert result["classification"] == "malicious", \
+        f"SQLi should be malicious, got {result['classification']} (score={result['threat_score']:.3f})"
+
+
+def test_sqli_high_threat_score(detector):
+    result = detector.predict(sqli_request())
+    assert result["threat_score"] >= 0.5, \
+        f"SQLi threat score too low: {result['threat_score']:.3f}"
+
+
+def test_normal_low_threat_score(detector):
+    result = detector.predict(normal_request())
+    assert result["threat_score"] < 0.7, \
+        f"Normal request threat score too high: {result['threat_score']:.3f}"
+
+
+def test_xss_detected(detector):
+    result = detector.predict(xss_request())
+    # XSS should have elevated threat score
+    assert result["threat_score"] > 0.3, \
+        f"XSS threat score too low: {result['threat_score']:.3f}"
+
+
+# ── Edge cases ────────────────────────────────────────────────────────────────
+
+def test_empty_content(detector):
+    req = normal_request()
+    req["content"] = ""
+    result = detector.predict(req)
+    assert result["classification"] in ("malicious", "benign")
+
+
+def test_post_sqli_body(detector):
+    req = {
+        "method":       "POST",
+        "url":          "/anadir.jsp",
+        "user_agent":   "Mozilla/5.0",
+        "content_type": "application/x-www-form-urlencoded",
+        "cookie":       "JSESSIONID=ABC",
+        "length":       146,
+        "content":      "id=2&cantidad=%27%3B+DROP+TABLE+usuarios%3B+SELECT+*+FROM+datos",
+        "host":         "localhost:8080",
+    }
+    result = detector.predict(req)
+    assert result["classification"] == "malicious"
+
+
+def test_missing_optional_fields(detector):
+    req = {"method": "GET", "url": "/index.jsp"}
+    result = detector.predict(req)
+    assert result["classification"] in ("malicious", "benign")
