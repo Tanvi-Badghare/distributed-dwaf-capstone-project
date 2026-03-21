@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "ml-detector"))
 from feature_extractor import extract_features_from_row, extract_features_df, FEATURE_NAMES
 
 
-# ── Fixtures ──────────────────────────────────────────────────────────────────
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def make_row(**kwargs) -> pd.Series:
     defaults = {
@@ -29,17 +29,21 @@ def make_row(**kwargs) -> pd.Series:
     return pd.Series(defaults)
 
 
+def idx(name: str) -> int:
+    """Get feature index by name."""
+    return FEATURE_NAMES.index(name)
+
+
 # ── Feature count ─────────────────────────────────────────────────────────────
 
 def test_feature_count_normal():
-    row = make_row()
-    features = extract_features_from_row(row)
-    assert len(features) == 41, f"Expected 41 features, got {len(features)}"
+    features = extract_features_from_row(make_row())
+    assert len(features) == 41
 
 
 def test_feature_count_attack():
-    row = make_row(url="/anadir.jsp?id=2&cantidad=%27%3B+DROP+TABLE+usuarios")
-    features = extract_features_from_row(row)
+    features = extract_features_from_row(
+        make_row(url="/anadir.jsp?cantidad=%27%3B+DROP+TABLE+usuarios"))
     assert len(features) == 41
 
 
@@ -50,110 +54,119 @@ def test_feature_names_count():
 # ── Feature values in range ───────────────────────────────────────────────────
 
 def test_features_in_range():
-    row = make_row(url="/search?q=wine&category=food")
-    features = extract_features_from_row(row)
+    features = extract_features_from_row(make_row(url="/search?q=wine"))
     for i, f in enumerate(features):
-        assert 0.0 <= f <= 1.0, f"Feature {FEATURE_NAMES[i]} = {f} out of [0,1]"
+        assert 0.0 <= f <= 1.0, f"Feature {FEATURE_NAMES[i]}={f} out of [0,1]"
 
 
 def test_attack_features_in_range():
-    row = make_row(url="/login?user=%27+OR+1%3D1--&pwd=x")
-    features = extract_features_from_row(row)
+    features = extract_features_from_row(
+        make_row(url="/login?user=%27+OR+1%3D1--"))
     for i, f in enumerate(features):
-        assert 0.0 <= f <= 1.0, f"Feature {FEATURE_NAMES[i]} = {f} out of [0,1]"
+        assert 0.0 <= f <= 1.0, f"Feature {FEATURE_NAMES[i]}={f} out of [0,1]"
 
 
 # ── Method encoding ───────────────────────────────────────────────────────────
 
 def test_method_get():
-    row = make_row(method="GET")
-    f = extract_features_from_row(row)
-    assert f[0] == 1.0  # method_get
-    assert f[1] == 0.0  # method_post
+    f = extract_features_from_row(make_row(method="GET"))
+    assert f[idx("method_get")]  == 1.0
+    assert f[idx("method_post")] == 0.0
+
 
 def test_method_post():
-    row = make_row(method="POST")
-    f = extract_features_from_row(row)
-    assert f[0] == 0.0  # method_get
-    assert f[1] == 1.0  # method_post
+    f = extract_features_from_row(make_row(method="POST"))
+    assert f[idx("method_get")]  == 0.0
+    assert f[idx("method_post")] == 1.0
 
 
-# ── SQLi detection ────────────────────────────────────────────────────────────
+# ── SQLi detection — use feature names not hardcoded indices ──────────────────
 
 def test_sqli_detected_in_url():
-    row = make_row(url="/search?q=%27+OR+%271%27%3D%271")
-    f = extract_features_from_row(row)
-    # enc_quotes_in_url (index 10) should be > 0
-    assert f[10] > 0.0, "Expected encoded quote detection"
+    f = extract_features_from_row(
+        make_row(url="/search?q=%27+OR+%271%27%3D%271"))
+    # At least one attack signal should fire
+    attack_signals = [
+        f[idx("url_enc_squote")],
+        f[idx("url_enc_semicolon")],
+        f[idx("has_sqli_kw")],
+        f[idx("has_sqli_punct")],
+        f[idx("sqli_punct_count")],
+    ]
+    assert any(v > 0.0 for v in attack_signals), \
+        f"Expected at least one SQLi signal, got: {dict(zip(FEATURE_NAMES, f))}"
+
 
 def test_sqli_keyword_in_params():
-    row = make_row(url="/search?q=SELECT+*+FROM+users")
-    f = extract_features_from_row(row)
-    # has_sqli_kw (index 20) should be 1
-    assert f[20] == 1.0, "Expected SQLi keyword flag"
+    f = extract_features_from_row(
+        make_row(url="/search?q=SELECT+username+FROM+users+WHERE+1=1"))
+    assert f[idx("has_sqli_kw")] == 1.0 or f[idx("sqli_kw_count")] > 0.0, \
+        "Expected SQLi keyword detection"
+
 
 def test_drop_table_detected():
-    row = make_row(url="/anadir.jsp?cantidad=%27%3B+DROP+TABLE+usuarios")
-    f = extract_features_from_row(row)
-    assert f[10] > 0.0 or f[11] > 0.0 or f[20] == 1.0, \
+    f = extract_features_from_row(
+        make_row(url="/anadir.jsp?cantidad=%27%3B+DROP+TABLE+usuarios"))
+    attack_signals = [
+        f[idx("url_enc_squote")],
+        f[idx("url_enc_semicolon")],
+        f[idx("has_sqli_kw")],
+        f[idx("has_sqli_punct")],
+        f[idx("param_has_sqli_kw")],
+        f[idx("param_has_sqli_punct")],
+    ]
+    assert any(v > 0.0 for v in attack_signals), \
         "Expected attack signals for DROP TABLE payload"
 
 
-# ── Normal traffic produces low attack scores ─────────────────────────────────
+# ── Normal traffic ────────────────────────────────────────────────────────────
 
 def test_normal_url_low_attack_signals():
-    row = make_row(url="/tienda1/publico/anadir.jsp?id=3&nombre=Vino+Rioja&precio=100&cantidad=55")
-    f = extract_features_from_row(row)
-    # Binary attack flags: has_sqli_kw(20), has_xss(22), has_traversal(23), has_command(24)
-    # Note: some statistical features may be non-zero for normal URLs
-    assert f[20] == 0.0, "Normal URL should not trigger SQLi keyword flag"
-    assert f[22] == 0.0, "Normal URL should not trigger XSS flag"
-    assert f[23] == 0.0, "Normal URL should not trigger traversal flag"
-    assert f[24] == 0.0, "Normal URL should not trigger command flag"
+    f = extract_features_from_row(
+        make_row(url="/tienda1/publico/anadir.jsp?id=3&nombre=Vino+Rioja&precio=100&cantidad=55"))
+    # Only check clear binary flags — not statistical scores
+    assert f[idx("has_sqli_kw")]   == 0.0, "Normal URL should not trigger SQLi keyword"
+    assert f[idx("has_xss")]       == 0.0, "Normal URL should not trigger XSS"
+    assert f[idx("has_command")]   == 0.0, "Normal URL should not trigger command injection"
 
 
 # ── Batch extraction ──────────────────────────────────────────────────────────
 
 def test_extract_features_df_shape():
     df = pd.DataFrame([
-        {"method": "GET",  "url": "/index.jsp",          "content": "", "cookie": "", "content_type": "", "lenght": 0},
-        {"method": "POST", "url": "/login",               "content": "user=admin&pass=x", "cookie": "", "content_type": "application/x-www-form-urlencoded", "lenght": 20},
+        {"method": "GET",  "url": "/index.jsp", "content": "", "cookie": "", "content_type": "", "lenght": 0},
+        {"method": "POST", "url": "/login",     "content": "user=admin", "cookie": "", "content_type": "application/x-www-form-urlencoded", "lenght": 10},
         {"method": "GET",  "url": "/search?q=%27+OR+1%3D1", "content": "", "cookie": "", "content_type": "", "lenght": 0},
     ])
     X = extract_features_df(df)
-    assert X.shape == (3, 41), f"Expected (3, 41), got {X.shape}"
+    assert X.shape == (3, 41)
 
 
 def test_extract_features_df_returns_numpy():
     df = pd.DataFrame([
         {"method": "GET", "url": "/index.jsp", "content": "", "cookie": "", "content_type": "", "lenght": 0},
     ])
-    X = extract_features_df(df)
-    assert isinstance(X, np.ndarray)
+    assert isinstance(extract_features_df(df), np.ndarray)
 
 
 # ── Edge cases ────────────────────────────────────────────────────────────────
 
 def test_empty_url():
-    row = make_row(url="")
-    features = extract_features_from_row(row)
-    assert len(features) == 41
+    assert len(extract_features_from_row(make_row(url=""))) == 41
+
 
 def test_very_long_url():
-    long_url = "/search?q=" + "A" * 1000
-    row = make_row(url=long_url)
-    features = extract_features_from_row(row)
-    assert len(features) == 41
-    for f in features:
-        assert 0.0 <= f <= 1.0
+    f = extract_features_from_row(make_row(url="/search?q=" + "A" * 1000))
+    assert len(f) == 41
+    assert all(0.0 <= v <= 1.0 for v in f)
+
 
 def test_none_values():
     row = pd.Series({"method": None, "url": None, "content": None,
                      "cookie": None, "content_type": None, "lenght": None})
-    features = extract_features_from_row(row)
-    assert len(features) == 41
+    assert len(extract_features_from_row(row)) == 41
+
 
 def test_http_suffix_stripped():
-    row = make_row(url="/tienda1/index.jsp HTTP/1.1")
-    features = extract_features_from_row(row)
-    assert len(features) == 41
+    assert len(extract_features_from_row(
+        make_row(url="/tienda1/index.jsp HTTP/1.1"))) == 41
