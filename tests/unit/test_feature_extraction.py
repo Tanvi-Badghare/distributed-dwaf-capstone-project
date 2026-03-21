@@ -90,7 +90,6 @@ def test_sqli_detected_in_url():
         f[idx("url_enc_squote")],
         f[idx("url_enc_semicolon")],
         f[idx("has_sqli_kw")],
-        f[idx("has_sqli_punct")],
         f[idx("sqli_punct_count")],
     ]
     assert any(v > 0.0 for v in attack_signals), \
@@ -111,9 +110,8 @@ def test_drop_table_detected():
         f[idx("url_enc_squote")],
         f[idx("url_enc_semicolon")],
         f[idx("has_sqli_kw")],
-        f[idx("has_sqli_punct")],
         f[idx("param_has_sqli_kw")],
-        f[idx("param_has_sqli_punct")],
+        f[idx("sqli_punct_count")],
     ]
     assert any(v > 0.0 for v in attack_signals), \
         "Expected attack signals for DROP TABLE payload"
@@ -169,4 +167,4 @@ def test_none_values():
 
 def test_http_suffix_stripped():
     assert len(extract_features_from_row(
-        make_row(url="/tienda1/index.jsp HTTP/1.1"))) == 41
+        make_row(url="/tienda1/index.jsp HTTP/1.1"))) == 41              
