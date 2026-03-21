@@ -1,39 +1,14 @@
-# ============================================================================
-# Orchestrator Dockerfile
-# Coordinates ML detection, ZKP verification, validator consensus, TAXII,
-# and feedback pipeline
-# ============================================================================
+FROM golang:1.22-alpine
 
-FROM python:3.11-slim
-
-# Python runtime settings
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
-
-# Working directory
 WORKDIR /app
 
-# Install minimal system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    gcc \
-    && rm -rf /var/lib/apt/lists/*
+COPY go.mod go.sum ./
+RUN go mod download
 
-# Copy requirements
-COPY requirements.txt .
+COPY *.go ./
 
-# Install dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+RUN go build -o orchestrator .
 
-# Copy orchestrator source code
-COPY . .
-
-# Expose orchestrator API port
 EXPOSE 7000
 
-# Healthcheck
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD curl -f http://localhost:7000/health || exit 1
-
-# Run orchestrator
-CMD ["python", "app.py"]
+CMD ["./orchestrator"]
