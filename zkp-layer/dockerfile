@@ -11,14 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY Cargo.toml Cargo.lock ./
-
-RUN mkdir src && \
-    echo "fn main() { println!(\"build-cache\"); }" > src/main.rs && \
-    cargo build --release && \
-    rm -rf src
-
-COPY src ./src
+COPY . .
 
 RUN cargo build --release && \
     strip target/release/zkp-waf
