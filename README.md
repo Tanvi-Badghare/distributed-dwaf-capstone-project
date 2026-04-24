@@ -125,8 +125,8 @@ dwaf_capstone_project/
 |-------------|------|
 | **Tanvi Badghare** | System architecture, ZKP layer (Groth16), distributed verification workflow |
 | **Aditi Pandey & Anjali** | ML anomaly detection models (Isolation Forest, Random Forest) |
-| **Jivesh Rai** | STIX 2.1 / TAXII 2.1 threat intelligence module |
-| **Anshul** | Technical documentation and repository organisation |
+| **Jivesh Rai and Anshul** | STIX 2.1 / TAXII 2.1 threat intelligence module |
+| **Entire Team** | Technical documentation and repository organisation |
 
 ---
 
